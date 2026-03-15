@@ -1,6 +1,8 @@
 import io
 import json
+import os
 import zipfile
+from datetime import datetime as dt
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,9 +11,10 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from ..config import settings
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Project, Task, TaskStatus, ProjectStatus
+from ..models import Project, Task, TaskStatus, ProjectStatus, Snippet
 from ..schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectListOut
 
 router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_api_key)])
@@ -139,9 +142,13 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
     if not project:
         raise HTTPException(404, "Project not found")
 
+    snippets_result = await db.execute(
+        select(Snippet).where(Snippet.project_id == project_id).order_by(Snippet.created_at)
+    )
+    snippets = snippets_result.scalars().all()
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Project metadata
         meta = {
             "work_name": project.work_name,
             "final_name": project.final_name,
@@ -159,20 +166,26 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
         }
         zf.writestr("project.json", json.dumps(meta, indent=2))
 
-        # Tasks
         tasks_data = [
             {"title": t.title, "description": t.description, "status": t.status.value}
             for t in project.tasks
         ]
         zf.writestr("tasks.json", json.dumps(tasks_data, indent=2))
 
-        # Notes
         notes_data = [{"content": n.content, "task_id": str(n.task_id) if n.task_id else None} for n in project.notes]
         zf.writestr("notes.json", json.dumps(notes_data, indent=2))
 
-        # Files
-        import os
-        from ..config import settings
+        snippets_data = [
+            {
+                "snippet_type": s.snippet_type,
+                "content": s.content,
+                "source_url": s.source_url,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in snippets
+        ]
+        zf.writestr("snippets.json", json.dumps(snippets_data, indent=2))
+
         for f in project.files:
             full_path = os.path.join(settings.storage_path, f.file_path)
             if os.path.exists(full_path):
@@ -180,7 +193,6 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
                 zf.write(full_path, arcname)
 
     buf.seek(0)
-    from datetime import datetime as dt
     name = project.work_name.replace(" ", "_")
     ts = dt.utcnow().strftime("%Y%m%d-%H%M%S")
     filename = f"{name}-{ts}.zip"

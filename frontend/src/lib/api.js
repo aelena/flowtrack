@@ -49,6 +49,10 @@ export const exportProject = async (id) => {
     method: 'POST',
     headers: { 'X-API-Key': get(apiKey) },
   });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+    throw new Error(err.detail || 'Export failed');
+  }
   return resp.blob();
 };
 export const getPending = (id) => request('GET', `/api/projects/${id}/pending`);

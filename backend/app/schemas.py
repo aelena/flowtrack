@@ -2,7 +2,7 @@ from datetime import datetime, date
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # --- Area ---
@@ -124,6 +124,12 @@ class NoteCreate(BaseModel):
     project_id: Optional[UUID] = None
     task_id: Optional[UUID] = None
     content: str
+
+    @model_validator(mode="after")
+    def require_parent(self):
+        if not self.project_id and not self.task_id:
+            raise ValueError("A note must belong to a project or a task (provide project_id or task_id)")
+        return self
 
 class NoteUpdate(BaseModel):
     content: str
