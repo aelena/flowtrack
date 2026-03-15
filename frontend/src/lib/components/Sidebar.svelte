@@ -1,12 +1,14 @@
 <script>
   import { onMount } from 'svelte';
   import { projects, areas, sidebarOpen, language } from '../stores.js';
-  import { listProjects, listAreas, createProject, createArea, updateArea, deleteArea, updateProject, archiveProject, exportProject } from '../api.js';
+  import { listProjects, listAreas, getAllTags, createProject, createArea, updateArea, deleteArea, updateProject, archiveProject, exportProject } from '../api.js';
   import { t } from '../i18n.js';
   import { goto } from '$app/navigation';
 
   let search = '';
   let filterArea = '';
+  let filterTag = '';
+  let allTags = [];
   let sortBy = 'created_at';
   let sortOrder = 'desc';
   let showArchived = false;
@@ -28,9 +30,11 @@
       const params = { sort_by: sortBy, sort_order: sortOrder, archived: showArchived };
       if (search) params.search = search;
       if (filterArea) params.area_id = filterArea;
-      const [p, a] = await Promise.all([listProjects(params), listAreas()]);
+      if (filterTag) params.tag = filterTag;
+      const [p, a, t] = await Promise.all([listProjects(params), listAreas(), getAllTags()]);
       projects.set(p);
       areas.set(a);
+      allTags = t || [];
     } catch (e) {
       console.error('Failed to load data:', e);
     }
@@ -198,6 +202,20 @@
     </button>
   </div>
 
+  {#if allTags.length > 0}
+    <div class="tag-filter">
+      <select bind:value={filterTag} on:change={doSearch}>
+        <option value="">All Tags</option>
+        {#each allTags as tag}
+          <option value={tag}>{tag}</option>
+        {/each}
+      </select>
+      {#if filterTag}
+        <button class="tag-clear" on:click={() => { filterTag = ''; doSearch(); }} title="Clear tag filter">×</button>
+      {/if}
+    </div>
+  {/if}
+
   <div class="sidebar-actions">
     <button class="primary small" on:click={() => showNewProject = true}>+ Project</button>
     <button class="small" on:click={() => showNewArea = true}>+ Folder</button>
@@ -252,6 +270,7 @@
                 <span class="drag-handle">⠿</span>
                 {#if si}<span class="status-icon">{si}</span>{/if}
                 <span class="project-name">{project.work_name}</span>
+                {#if project.tags?.length}<span class="mini-tags">{#each project.tags.slice(0, 2) as tag}<span class="mini-tag">{tag}</span>{/each}</span>{/if}
                 {#if project.star_rating}<span class="mini-stars">{'\u2605'.repeat(project.star_rating)}</span>{/if}
               </button>
               <button class="action-trigger" on:click={(e) => toggleMenu(e, project.id)} title="Actions">⋯</button>
@@ -425,7 +444,14 @@
   .tree-item:hover .drag-handle { opacity: 0.6; }
   .status-icon { font-size: 0.7rem; flex-shrink: 0; }
   .project-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mini-tags { display: flex; gap: 0.15rem; flex-shrink: 0; }
+  .mini-tag { font-size: 0.55rem; padding: 0 0.25rem; background: var(--bg-tertiary); border-radius: 3px; color: var(--text-muted); white-space: nowrap; }
   .mini-stars { color: #f5a623; font-size: 0.6rem; }
+
+  .tag-filter { display: flex; gap: 0.25rem; align-items: center; }
+  .tag-filter select { flex: 1; font-size: 0.75rem; padding: 0.3rem; }
+  .tag-clear { background: none; border: none; font-size: 1rem; color: var(--text-muted); cursor: pointer; padding: 0 0.2rem; line-height: 1; }
+  .tag-clear:hover { color: var(--danger); }
 
   /* Action trigger (⋯ button) */
   .action-trigger {

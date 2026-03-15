@@ -59,6 +59,7 @@ def _project_to_dict(p):
         "area_id": str(p.area_id) if p.area_id else None,
         "archived": p.archived,
         "status": p.status.value if p.status else "active",
+        "tags": p.tags or [],
         "collaborators": p.collaborators or [],
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
@@ -184,6 +185,7 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
                 area_id=_safe_uuid(p_data.get("area_id")),
                 archived=p_data.get("archived", False),
                 status=status_enum,
+                tags=p_data.get("tags", []),
                 collaborators=p_data.get("collaborators", []),
             )
             if project_id:

@@ -23,6 +23,10 @@
   let fileInput;
   let collapsedFileFolders = {};
 
+  // Tag editing
+  let newTag = '';
+  let showTagInput = false;
+
   async function load() {
     if (!projectId) return;
     project = await getProject(projectId);
@@ -86,6 +90,22 @@
 
   async function handleArchive() {
     await archiveProject(projectId);
+    await load();
+  }
+
+  async function addTag() {
+    const tag = newTag.trim().toLowerCase();
+    if (!tag || (project.tags || []).includes(tag)) { newTag = ''; return; }
+    const tags = [...(project.tags || []), tag];
+    await updateProject(projectId, { tags });
+    newTag = '';
+    showTagInput = false;
+    await load();
+  }
+
+  async function removeTag(tag) {
+    const tags = (project.tags || []).filter(t => t !== tag);
+    await updateProject(projectId, { tags });
     await load();
   }
 
@@ -165,6 +185,27 @@
         {/each}
       </div>
 
+      <div class="tag-row">
+        {#each (project.tags || []) as tag}
+          <span class="tag-pill">
+            {tag}
+            <button class="tag-remove" on:click={() => removeTag(tag)}>×</button>
+          </span>
+        {/each}
+        {#if showTagInput}
+          <input
+            class="tag-input"
+            type="text"
+            bind:value={newTag}
+            placeholder="tag name"
+            on:keydown={(e) => { if (e.key === 'Enter') addTag(); if (e.key === 'Escape') { showTagInput = false; newTag = ''; } }}
+            on:blur={() => { if (!newTag.trim()) showTagInput = false; }}
+          />
+        {:else}
+          <button class="tag-add" on:click={() => showTagInput = true}>+ tag</button>
+        {/if}
+      </div>
+
       <div class="progress-row">
         <div class="progress-item">
           <span class="progress-label">{t('completion', $language)}: {project.task_completion}%</span>
@@ -172,14 +213,17 @@
         </div>
         <div class="progress-item">
           <span class="progress-label">{t('subjective', $language)}: {project.subjective_completion}%</span>
-          <div class="progress-bar"><div class="fill" style="width: {project.subjective_completion}%"></div></div>
+          <div class="progress-bar"><div class="fill subjective-fill" style="width: {project.subjective_completion}%"></div></div>
         </div>
       </div>
 
       <div class="mode-tabs">
-        <button class:active={mode === 'overview'} on:click={() => mode = 'overview'}>Overview</button>
-        <button class:active={mode === 'write'} on:click={() => mode = 'write'}>{t('writeMode', $language)}</button>
-        <button class:active={mode === 'chat'} on:click={() => mode = 'chat'}>{t('chatMode', $language)}</button>
+        <button class:active={mode === 'overview' && !editing} on:click={() => { editing = false; mode = 'overview'; }}>Overview</button>
+        <button class:active={mode === 'write' && !editing} on:click={() => { editing = false; mode = 'write'; }}>{t('writeMode', $language)}</button>
+        <button class:active={mode === 'chat' && !editing} on:click={() => { editing = false; mode = 'chat'; }}>{t('chatMode', $language)}</button>
+        {#if editing}
+          <span class="mode-editing">Editing</span>
+        {/if}
       </div>
     </header>
 
@@ -320,6 +364,50 @@
   .status-badge.on_hold { background: var(--warning); color: white; }
   .status-badge.deprecated { background: var(--text-muted); color: white; }
   .header-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    margin: 0.5rem 0;
+  }
+  .tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+  .tag-remove {
+    background: none;
+    border: none;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+  .tag-remove:hover { color: var(--danger); }
+  .tag-add {
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .tag-add:hover { border-color: var(--accent); color: var(--accent); }
+  .tag-input {
+    width: 100px;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 12px;
+  }
+
   .progress-row { display: flex; gap: 1.5rem; margin: 0.75rem 0; }
   .progress-item { flex: 1; }
   .progress-label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block; }
@@ -327,6 +415,9 @@
   .mode-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-top: 0.75rem; }
   .mode-tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 0.5rem 1rem; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: -2px; }
   .mode-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .mode-editing { font-size: 0.75rem; color: var(--warning); font-weight: 600; margin-left: auto; align-self: center; }
+
+  .subjective-fill { background: #e89b3e; }
 
   .project-details section { margin-bottom: 0.75rem; }
   .project-details h3 { font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem; }

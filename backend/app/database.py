@@ -30,5 +30,11 @@ async def init_db():
                 ) THEN
                     ALTER TABLE projects ADD COLUMN status VARCHAR(20) DEFAULT 'active';
                 END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='projects' AND column_name='tags'
+                ) THEN
+                    ALTER TABLE projects ADD COLUMN tags JSONB DEFAULT '[]'::jsonb;
+                END IF;
             END $$;
         """))

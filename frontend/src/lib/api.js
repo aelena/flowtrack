@@ -3,7 +3,7 @@ import { apiKey } from './stores.js';
 
 const BASE_URL = typeof window !== 'undefined'
   ? (window.__PUBLIC_API_URL || 'http://localhost:7028')
-  : 'http://localhost:7028';
+  : (process.env.INTERNAL_API_URL || 'http://api:8000');
 
 function headers() {
   return {
@@ -39,6 +39,7 @@ export const listProjects = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request('GET', `/api/projects/${qs ? '?' + qs : ''}`);
 };
+export const getAllTags = () => request('GET', '/api/projects/tags/all');
 export const getProject = (id) => request('GET', `/api/projects/${id}`);
 export const createProject = (data) => request('POST', '/api/projects/', data);
 export const updateProject = (id, data) => request('PUT', `/api/projects/${id}`, data);

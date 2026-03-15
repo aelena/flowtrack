@@ -54,6 +54,7 @@ class Project(Base):
     area_id = Column(UUID(as_uuid=True), ForeignKey("areas.id", ondelete="SET NULL"), nullable=True)
     archived = Column(Boolean, default=False)
     status = Column(SAEnum(ProjectStatus), default=ProjectStatus.active)
+    tags = Column(JSONB, default=list)
     collaborators = Column(JSONB, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

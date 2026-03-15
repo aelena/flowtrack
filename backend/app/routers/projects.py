@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +28,7 @@ def compute_task_completion(tasks):
 async def list_projects(
     search: str | None = None,
     area_id: UUID | None = None,
+    tag: str | None = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
     archived: bool = False,
@@ -41,6 +42,8 @@ async def list_projects(
         )
     if area_id:
         query = query.where(Project.area_id == area_id)
+    if tag:
+        query = query.where(Project.tags.contains([tag]))
 
     sort_col = getattr(Project, sort_by, Project.created_at)
     if sort_order == "asc":
@@ -57,6 +60,15 @@ async def list_projects(
         data.task_completion = compute_task_completion(p.tasks)
         out.append(data)
     return out
+
+
+@router.get("/tags/all", response_model=list[str])
+async def get_all_tags(db: AsyncSession = Depends(get_db)):
+    """Get all unique tags across all projects."""
+    result = await db.execute(
+        text("SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM projects WHERE tags IS NOT NULL AND tags != '[]'::jsonb ORDER BY tag")
+    )
+    return [row[0] for row in result.fetchall()]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)

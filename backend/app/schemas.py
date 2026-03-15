@@ -36,6 +36,7 @@ class ProjectCreate(BaseModel):
     local_dir: Optional[str] = None
     area_id: Optional[UUID] = None
     status: str = "active"
+    tags: list[str] = []
     collaborators: list = []
 
 class ProjectUpdate(BaseModel):
@@ -54,6 +55,7 @@ class ProjectUpdate(BaseModel):
     local_dir: Optional[str] = None
     area_id: Optional[UUID] = None
     status: Optional[str] = None
+    tags: Optional[list[str]] = None
     collaborators: Optional[list] = None
 
 class ProjectOut(BaseModel):
@@ -74,6 +76,7 @@ class ProjectOut(BaseModel):
     area_id: Optional[UUID]
     archived: bool
     status: str
+    tags: list[str]
     collaborators: list
     task_completion: float = 0.0
     created_at: datetime
@@ -87,6 +90,7 @@ class ProjectListOut(BaseModel):
     area_id: Optional[UUID]
     archived: bool
     status: str
+    tags: list[str]
     star_rating: Optional[int]
     task_completion: float = 0.0
     subjective_completion: int
