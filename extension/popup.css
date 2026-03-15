@@ -1,0 +1,154 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #2c2c2c;
+  background: #fafaf8;
+  width: 320px;
+}
+
+.container {
+  padding: 16px;
+}
+
+h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #1a1a1a;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e8e6e1;
+}
+
+.field {
+  margin-bottom: 10px;
+  position: relative;
+}
+
+label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid #d5d3ce;
+  border-radius: 4px;
+  background: #fff;
+  color: #2c2c2c;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #7c9a6e;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.btn-icon {
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #888;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.btn-icon:hover {
+  color: #2c2c2c;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  border: 1px solid #d5d3ce;
+  border-radius: 4px;
+  background: #fff;
+  color: #2c2c2c;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover {
+  background: #f0eeea;
+  border-color: #c0bdb7;
+}
+
+.btn-primary {
+  background: #7c9a6e;
+  border-color: #7c9a6e;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #6b8a5e;
+  border-color: #6b8a5e;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.status.success {
+  background: #edf5ea;
+  color: #3d6b2e;
+  border: 1px solid #c5debb;
+}
+
+.status.error {
+  background: #fdf0ef;
+  color: #9b3232;
+  border: 1px solid #f0c5c5;
+}

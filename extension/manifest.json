@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "FlowTrack Clipper",
+  "version": "1.0.0",
+  "description": "Clip URLs and text snippets to FlowTrack projects",
+  "permissions": ["activeTab", "storage", "contextMenus"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

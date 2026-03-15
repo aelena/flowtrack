@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowTrack Clipper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>FlowTrack</h1>
+
+    <div class="field">
+      <label for="apiUrl">API URL</label>
+      <input type="url" id="apiUrl" placeholder="http://localhost:7028">
+    </div>
+
+    <div class="field">
+      <label for="apiKey">API Key</label>
+      <input type="password" id="apiKey" placeholder="ft_dev_key_change_me">
+    </div>
+
+    <div class="field">
+      <label for="project">Project</label>
+      <select id="project">
+        <option value="">-- Select project --</option>
+      </select>
+      <button id="refreshProjects" class="btn-icon" title="Refresh projects">&#x21bb;</button>
+    </div>
+
+    <div class="field">
+      <label for="snippet">Snippet</label>
+      <textarea id="snippet" rows="4" placeholder="Paste or type text here..."></textarea>
+    </div>
+
+    <div class="actions">
+      <button id="saveUrl" class="btn">Save URL</button>
+      <button id="saveSnippet" class="btn btn-primary">Save Snippet</button>
+    </div>
+
+    <div id="status" class="status" hidden></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
