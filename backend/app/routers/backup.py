@@ -1,9 +1,8 @@
-import json
 from datetime import datetime, date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Body
-from sqlalchemy import select, delete
+from fastapi import APIRouter, Depends, Body, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,12 +13,31 @@ from ..models import Area, Project, Task, Note, Snippet, TaskStatus, ProjectStat
 router = APIRouter(prefix="/api/backup", tags=["backup"], dependencies=[Depends(verify_api_key)])
 
 
-def _serialize_dt(obj):
-    if isinstance(obj, (datetime, date)):
-        return obj.isoformat()
-    if isinstance(obj, UUID):
-        return str(obj)
-    raise TypeError(f"Not serializable: {type(obj)}")
+def _safe_uuid(val):
+    if not val:
+        return None
+    try:
+        return UUID(str(val))
+    except (ValueError, AttributeError):
+        return None
+
+
+def _safe_dt(val):
+    if not val:
+        return None
+    try:
+        return datetime.fromisoformat(str(val))
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_date(val):
+    if not val:
+        return None
+    try:
+        return date.fromisoformat(str(val))
+    except (ValueError, TypeError):
+        return None
 
 
 def _project_to_dict(p):
@@ -71,14 +89,12 @@ def _project_to_dict(p):
 @router.get("/export")
 async def export_all(db: AsyncSession = Depends(get_db)):
     """Export all areas, projects (with tasks, notes), and snippets as JSON."""
-    # Areas
     areas_result = await db.execute(select(Area).order_by(Area.name))
     areas = [
         {"id": str(a.id), "name": a.name, "created_at": a.created_at.isoformat() if a.created_at else None}
         for a in areas_result.scalars().all()
     ]
 
-    # Projects with tasks and notes
     projects_result = await db.execute(
         select(Project)
         .options(selectinload(Project.tasks).selectinload(Task.notes), selectinload(Project.notes))
@@ -86,7 +102,6 @@ async def export_all(db: AsyncSession = Depends(get_db)):
     )
     projects = [_project_to_dict(p) for p in projects_result.scalars().all()]
 
-    # Snippets
     snippets_result = await db.execute(select(Snippet).order_by(Snippet.created_at))
     snippets = [
         {
@@ -113,123 +128,163 @@ async def export_all(db: AsyncSession = Depends(get_db)):
 async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
     """Import areas, projects (with tasks, notes), and snippets from JSON.
 
-    This merges data: existing records with matching IDs are skipped,
-    new records are inserted. To do a full replace, clear the database first.
+    Merges data: existing records with matching IDs are skipped,
+    new records are inserted.
     """
     imported = {"areas": 0, "projects": 0, "tasks": 0, "notes": 0, "snippets": 0}
+    errors = []
 
-    # Import areas
-    for a_data in data.get("areas", []):
-        area_id = UUID(a_data["id"]) if a_data.get("id") else None
-        existing = await db.get(Area, area_id) if area_id else None
-        if existing:
-            continue
-        area = Area(
-            id=area_id,
-            name=a_data["name"],
-        )
-        if a_data.get("created_at"):
-            area.created_at = datetime.fromisoformat(a_data["created_at"])
-        db.add(area)
-        imported["areas"] += 1
-
-    await db.flush()
-
-    # Import projects
-    for p_data in data.get("projects", []):
-        project_id = UUID(p_data["id"]) if p_data.get("id") else None
-        existing = await db.get(Project, project_id) if project_id else None
-        if existing:
-            continue
-
-        project = Project(
-            id=project_id,
-            work_name=p_data["work_name"],
-            final_name=p_data.get("final_name"),
-            description=p_data.get("description"),
-            vision=p_data.get("vision"),
-            goal=p_data.get("goal"),
-            completion_criteria=p_data.get("completion_criteria"),
-            abandonment_criteria=p_data.get("abandonment_criteria"),
-            desired_end_date=date.fromisoformat(p_data["desired_end_date"]) if p_data.get("desired_end_date") else None,
-            github_repo=p_data.get("github_repo"),
-            website=p_data.get("website"),
-            star_rating=p_data.get("star_rating"),
-            subjective_completion=p_data.get("subjective_completion", 0),
-            local_dir=p_data.get("local_dir"),
-            area_id=UUID(p_data["area_id"]) if p_data.get("area_id") else None,
-            archived=p_data.get("archived", False),
-            status=ProjectStatus(p_data.get("status", "active")),
-            collaborators=p_data.get("collaborators", []),
-        )
-        if p_data.get("created_at"):
-            project.created_at = datetime.fromisoformat(p_data["created_at"])
-        if p_data.get("updated_at"):
-            project.updated_at = datetime.fromisoformat(p_data["updated_at"])
-        db.add(project)
-        imported["projects"] += 1
+    try:
+        # Import areas first
+        for a_data in data.get("areas", []):
+            area_id = _safe_uuid(a_data.get("id"))
+            if area_id:
+                existing = await db.get(Area, area_id)
+                if existing:
+                    continue
+            area = Area(name=a_data["name"])
+            if area_id:
+                area.id = area_id
+            created_at = _safe_dt(a_data.get("created_at"))
+            if created_at:
+                area.created_at = created_at
+            db.add(area)
+            imported["areas"] += 1
 
         await db.flush()
 
-        # Import tasks for this project
-        for t_data in p_data.get("tasks", []):
-            task_id = UUID(t_data["id"]) if t_data.get("id") else None
-            existing_task = await db.get(Task, task_id) if task_id else None
-            if existing_task:
-                continue
-            task = Task(
-                id=task_id,
-                project_id=project.id,
-                title=t_data["title"],
-                description=t_data.get("description"),
-                status=TaskStatus(t_data.get("status", "new")),
+        # Import projects
+        for p_data in data.get("projects", []):
+            project_id = _safe_uuid(p_data.get("id"))
+            if project_id:
+                existing = await db.get(Project, project_id)
+                if existing:
+                    continue
+
+            status_val = p_data.get("status", "active")
+            try:
+                status_enum = ProjectStatus(status_val)
+            except ValueError:
+                status_enum = ProjectStatus.active
+
+            project = Project(
+                work_name=p_data["work_name"],
+                final_name=p_data.get("final_name"),
+                description=p_data.get("description"),
+                vision=p_data.get("vision"),
+                goal=p_data.get("goal"),
+                completion_criteria=p_data.get("completion_criteria"),
+                abandonment_criteria=p_data.get("abandonment_criteria"),
+                desired_end_date=_safe_date(p_data.get("desired_end_date")),
+                github_repo=p_data.get("github_repo"),
+                website=p_data.get("website"),
+                star_rating=p_data.get("star_rating"),
+                subjective_completion=p_data.get("subjective_completion", 0),
+                local_dir=p_data.get("local_dir"),
+                area_id=_safe_uuid(p_data.get("area_id")),
+                archived=p_data.get("archived", False),
+                status=status_enum,
+                collaborators=p_data.get("collaborators", []),
             )
-            if t_data.get("created_at"):
-                task.created_at = datetime.fromisoformat(t_data["created_at"])
-            if t_data.get("updated_at"):
-                task.updated_at = datetime.fromisoformat(t_data["updated_at"])
-            db.add(task)
-            imported["tasks"] += 1
+            if project_id:
+                project.id = project_id
+            created_at = _safe_dt(p_data.get("created_at"))
+            if created_at:
+                project.created_at = created_at
+            updated_at = _safe_dt(p_data.get("updated_at"))
+            if updated_at:
+                project.updated_at = updated_at
 
-        # Import notes for this project
-        for n_data in p_data.get("notes", []):
-            note_id = UUID(n_data["id"]) if n_data.get("id") else None
-            existing_note = await db.get(Note, note_id) if note_id else None
-            if existing_note:
+            db.add(project)
+            await db.flush()
+            imported["projects"] += 1
+
+            # Import tasks for this project
+            for t_data in p_data.get("tasks", []):
+                task_id = _safe_uuid(t_data.get("id"))
+                if task_id:
+                    existing_task = await db.get(Task, task_id)
+                    if existing_task:
+                        continue
+
+                status_str = t_data.get("status", "new")
+                try:
+                    task_status = TaskStatus(status_str)
+                except ValueError:
+                    task_status = TaskStatus.new
+
+                task = Task(
+                    project_id=project.id,
+                    title=t_data["title"],
+                    description=t_data.get("description"),
+                    status=task_status,
+                )
+                if task_id:
+                    task.id = task_id
+                created_at = _safe_dt(t_data.get("created_at"))
+                if created_at:
+                    task.created_at = created_at
+                updated_at = _safe_dt(t_data.get("updated_at"))
+                if updated_at:
+                    task.updated_at = updated_at
+                db.add(task)
+                imported["tasks"] += 1
+
+            # Import notes for this project
+            for n_data in p_data.get("notes", []):
+                note_id = _safe_uuid(n_data.get("id"))
+                if note_id:
+                    existing_note = await db.get(Note, note_id)
+                    if existing_note:
+                        continue
+
+                note = Note(
+                    project_id=project.id,
+                    task_id=_safe_uuid(n_data.get("task_id")),
+                    content=n_data["content"],
+                )
+                if note_id:
+                    note.id = note_id
+                created_at = _safe_dt(n_data.get("created_at"))
+                if created_at:
+                    note.created_at = created_at
+                updated_at = _safe_dt(n_data.get("updated_at"))
+                if updated_at:
+                    note.updated_at = updated_at
+                db.add(note)
+                imported["notes"] += 1
+
+        await db.flush()
+
+        # Import snippets
+        for s_data in data.get("snippets", []):
+            snippet_project_id = _safe_uuid(s_data.get("project_id"))
+            if not snippet_project_id:
                 continue
-            note = Note(
-                id=note_id,
-                project_id=project.id,
-                task_id=UUID(n_data["task_id"]) if n_data.get("task_id") else None,
-                content=n_data["content"],
+            snippet_id = _safe_uuid(s_data.get("id"))
+            if snippet_id:
+                existing_snippet = await db.get(Snippet, snippet_id)
+                if existing_snippet:
+                    continue
+
+            snippet = Snippet(
+                project_id=snippet_project_id,
+                snippet_type=s_data.get("snippet_type", "snippet"),
+                content=s_data.get("content", ""),
+                source_url=s_data.get("source_url"),
             )
-            if n_data.get("created_at"):
-                note.created_at = datetime.fromisoformat(n_data["created_at"])
-            if n_data.get("updated_at"):
-                note.updated_at = datetime.fromisoformat(n_data["updated_at"])
-            db.add(note)
-            imported["notes"] += 1
+            if snippet_id:
+                snippet.id = snippet_id
+            created_at = _safe_dt(s_data.get("created_at"))
+            if created_at:
+                snippet.created_at = created_at
+            db.add(snippet)
+            imported["snippets"] += 1
 
-    await db.flush()
+        await db.commit()
 
-    # Import snippets
-    for s_data in data.get("snippets", []):
-        snippet_id = UUID(s_data["id"]) if s_data.get("id") else None
-        existing_snippet = await db.get(Snippet, snippet_id) if snippet_id else None
-        if existing_snippet:
-            continue
-        snippet = Snippet(
-            id=snippet_id,
-            project_id=UUID(s_data["project_id"]),
-            snippet_type=s_data["snippet_type"],
-            content=s_data["content"],
-            source_url=s_data.get("source_url"),
-        )
-        if s_data.get("created_at"):
-            snippet.created_at = datetime.fromisoformat(s_data["created_at"])
-        db.add(snippet)
-        imported["snippets"] += 1
-
-    await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
 
     return {"status": "ok", "imported": imported}

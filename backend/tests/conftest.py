@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 os.environ["API_KEY"] = "test_key"
 os.environ["DATABASE_URL"] = os.environ.get(
@@ -16,15 +17,8 @@ os.environ["STORAGE_PATH"] = "/tmp/flowtrack_test_storage"
 from app.database import Base, get_db
 from app.main import app
 
-test_engine = create_async_engine(os.environ["DATABASE_URL"], echo=False)
+test_engine = create_async_engine(os.environ["DATABASE_URL"], echo=False, poolclass=NullPool)
 test_session = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(autouse=True)
