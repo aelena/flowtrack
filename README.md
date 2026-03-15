@@ -1,6 +1,6 @@
 # FlowTrack
 
-Personal project tracking tool with a minimalistic, zen-style interface. Combines task management, note-taking, and AI-assisted workflows around the concept of a **Project** — a stateful bag of properties that transitions through a lightweight lifecycle.
+Personal project tracking tool with a minimalistic, zen-style interface. Combines task management, note-taking, and AI-assisted workflows around the concept of a **Project** — a stateful bag of properties that transitions through a lightweight lifecycle. No Gantt BS, no agile artifacts, just my own way of tracking. Will probably not work for you of the box.
 
 ## Architecture
 
@@ -37,6 +37,7 @@ Set these in `.env`:
 | `DATABASE_URL` | `postgresql+asyncpg://...@db:5432/flowtrack` | Internal DB connection (container-to-container, port 5432) |
 | `API_KEY` | `ft_dev_key_change_me` | API key for all endpoints (`X-API-Key` header) |
 | `STORAGE_PATH` | `/app/storage` | Persistent file storage path |
+| `CORS_ORIGINS` | `http://localhost:7027` | Comma-separated allowed origins for CORS |
 
 ## Features
 

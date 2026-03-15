@@ -1,23 +1,19 @@
 <script>
+  import { onDestroy } from 'svelte';
+  import { renderMarkdown } from '../markdown.js';
+
   export let content = '';
   export let onSave = () => {};
 
   let previewHtml = '';
+  let saveTimer = null;
 
-  function renderMarkdown(text) {
-    return text
-      .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-      .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`{3}([\s\S]*?)`{3}/g, '<pre><code>$1</code></pre>')
-      .replace(/`(.+?)`/g, '<code>$1</code>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>');
+  function debouncedSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => onSave(content), 800);
   }
+
+  onDestroy(() => clearTimeout(saveTimer));
 
   $: previewHtml = renderMarkdown(content);
 </script>
@@ -28,7 +24,7 @@
     <textarea
       class="markdown-editor"
       bind:value={content}
-      on:input={() => onSave(content)}
+      on:input={debouncedSave}
       placeholder="Write markdown here..."
     ></textarea>
   </div>
