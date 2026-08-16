@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import areas, projects, tasks, notes, files, extension, llm, config, backup
+from .routers import areas, backup, config, extension, files, llm, notes, projects, tasks
 
 logger = logging.getLogger("flowtrack")
 
@@ -61,7 +61,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()
     first = errors[0] if errors else {}
-    field = " -> ".join(str(l) for l in first.get("loc", [])) if first else "unknown"
+    field = " -> ".join(str(part) for part in first.get("loc", [])) if first else "unknown"
     msg = first.get("msg", "Validation error")
     return JSONResponse(
         status_code=422,
@@ -72,7 +72,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "detail": f"{field}: {msg}",
             "errors": [
                 {
-                    "field": " -> ".join(str(l) for l in e.get("loc", [])),
+                    "field": " -> ".join(str(part) for part in e.get("loc", [])),
                     "message": e.get("msg", ""),
                 }
                 for e in errors

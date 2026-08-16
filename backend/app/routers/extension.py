@@ -12,9 +12,7 @@ router = APIRouter(prefix="/api/extension", tags=["extension"], dependencies=[De
 
 @router.get("/projects")
 async def list_projects_simple(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Project).where(Project.archived == False).order_by(Project.work_name)
-    )
+    result = await db.execute(select(Project).where(Project.archived.is_(False)).order_by(Project.work_name))
     projects = result.scalars().all()
     return [{"id": str(p.id), "name": p.work_name} for p in projects]
 

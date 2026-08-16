@@ -2,20 +2,21 @@ import io
 import json
 import os
 import zipfile
-from datetime import datetime as dt, timezone
+from datetime import UTC
+from datetime import datetime as dt
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..config import settings
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Project, Task, TaskStatus, Snippet
-from ..schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectListOut, CollaboratorCreate
+from ..models import Project, Snippet, TaskStatus
+from ..schemas import CollaboratorCreate, ProjectCreate, ProjectListOut, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_api_key)])
 
@@ -40,9 +41,7 @@ async def list_projects(
     query = select(Project).options(selectinload(Project.tasks)).where(Project.archived == archived)
 
     if search:
-        query = query.where(
-            Project.work_name.ilike(f"%{search}%") | Project.final_name.ilike(f"%{search}%")
-        )
+        query = query.where(Project.work_name.ilike(f"%{search}%") | Project.final_name.ilike(f"%{search}%"))
     if area_id:
         query = query.where(Project.area_id == area_id)
     if tag:
@@ -50,10 +49,7 @@ async def list_projects(
 
     ALLOWED_SORT = {"created_at", "work_name", "star_rating", "updated_at", "subjective_completion"}
     sort_col = getattr(Project, sort_by) if sort_by in ALLOWED_SORT else Project.created_at
-    if sort_order == "asc":
-        query = query.order_by(sort_col.asc())
-    else:
-        query = query.order_by(sort_col.desc())
+    query = query.order_by(sort_col.asc() if sort_order == "asc" else sort_col.desc())
 
     result = await db.execute(query)
     projects = result.scalars().all()
@@ -70,7 +66,9 @@ async def list_projects(
 async def get_all_tags(db: AsyncSession = Depends(get_db)):
     """Get all unique tags across all projects."""
     result = await db.execute(
-        text("SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM projects WHERE tags IS NOT NULL AND tags != '[]'::jsonb ORDER BY tag")
+        text(
+            "SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM projects WHERE tags IS NOT NULL AND tags != '[]'::jsonb ORDER BY tag"
+        )
     )
     return [row[0] for row in result.fetchall()]
 
@@ -176,12 +174,13 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
         zf.writestr("project.json", json.dumps(meta, indent=2))
 
         tasks_data = [
-            {"title": t.title, "description": t.description, "status": t.status.value}
-            for t in project.tasks
+            {"title": t.title, "description": t.description, "status": t.status.value} for t in project.tasks
         ]
         zf.writestr("tasks.json", json.dumps(tasks_data, indent=2))
 
-        notes_data = [{"content": n.content, "task_id": str(n.task_id) if n.task_id else None} for n in project.notes]
+        notes_data = [
+            {"content": n.content, "task_id": str(n.task_id) if n.task_id else None} for n in project.notes
+        ]
         zf.writestr("notes.json", json.dumps(notes_data, indent=2))
 
         snippets_data = [
@@ -203,7 +202,7 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
     buf.seek(0)
     name = project.work_name.replace(" ", "_")
-    ts = dt.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    ts = dt.now(UTC).strftime("%Y%m%d-%H%M%S")
     filename = f"{name}-{ts}.zip"
     return StreamingResponse(
         buf,
@@ -225,7 +224,8 @@ async def get_pending(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
     pending_tasks = [
         {"id": str(t.id), "title": t.title, "status": t.status.value}
-        for t in project.tasks if t.status != TaskStatus.done
+        for t in project.tasks
+        if t.status != TaskStatus.done
     ]
     return {
         "project": project.work_name,
@@ -237,7 +237,9 @@ async def get_pending(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{project_id}/collaborators", response_model=ProjectOut)
-async def add_collaborator(project_id: UUID, collaborator: CollaboratorCreate, db: AsyncSession = Depends(get_db)):
+async def add_collaborator(
+    project_id: UUID, collaborator: CollaboratorCreate, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(
         select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
     )

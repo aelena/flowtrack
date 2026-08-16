@@ -8,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..dependencies import verify_api_key
 from ..models import Task
-from ..schemas import TaskCreate, TaskUpdate, TaskOut
+from ..schemas import TaskCreate, TaskOut, TaskUpdate
 
-router = APIRouter(prefix="/api/projects/{project_id}/tasks", tags=["tasks"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/tasks", tags=["tasks"], dependencies=[Depends(verify_api_key)]
+)
 
 
 def parse_task_list(content: str) -> list[str]:
@@ -20,7 +22,7 @@ def parse_task_list(content: str) -> list[str]:
     for line in lines:
         stripped = line.strip()
         # Match bullet lists (- or * or +) or ordered lists (1. 2. etc.)
-        match = re.match(r'^(?:[-*+]|\d+[.)]) +(.+)', stripped)
+        match = re.match(r"^(?:[-*+]|\d+[.)]) +(.+)", stripped)
         if match:
             tasks.append(match.group(1).strip())
         elif stripped and not tasks:
@@ -31,9 +33,7 @@ def parse_task_list(content: str) -> list[str]:
 
 @router.get("/", response_model=list[TaskOut])
 async def list_tasks(project_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Task).where(Task.project_id == project_id).order_by(Task.created_at)
-    )
+    result = await db.execute(select(Task).where(Task.project_id == project_id).order_by(Task.created_at))
     return result.scalars().all()
 
 

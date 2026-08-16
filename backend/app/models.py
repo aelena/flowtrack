@@ -1,19 +1,17 @@
-import uuid
-from datetime import datetime, date, timezone
-
-from sqlalchemy import (
-    Column, String, Text, Integer, Boolean, Date, DateTime,
-    ForeignKey, Enum as SAEnum
-)
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
 import enum
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import relationship
 
 from .database import Base
 
 
 def _utcnow():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ProjectStatus(str, enum.Enum):

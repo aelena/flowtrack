@@ -1,14 +1,14 @@
-from datetime import datetime, date, timezone
+from datetime import UTC, date, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Area, Project, Task, Note, Snippet, TaskStatus, ProjectStatus
+from ..models import Area, Note, Project, ProjectStatus, Snippet, Task, TaskStatus
 
 router = APIRouter(prefix="/api/backup", tags=["backup"], dependencies=[Depends(verify_api_key)])
 
@@ -118,7 +118,7 @@ async def export_all(db: AsyncSession = Depends(get_db)):
 
     return {
         "version": "1.0",
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "areas": areas,
         "projects": projects,
         "snippets": snippets,
@@ -296,6 +296,11 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
 
     except Exception:
         await db.rollback()
-        raise HTTPException(status_code=400, detail="Import failed: the uploaded data contains invalid or conflicting records")
+        # `from None`: the internal error is deliberately not surfaced to the
+        # client, only logged by the generic handler.
+        raise HTTPException(
+            status_code=400,
+            detail="Import failed: the uploaded data contains invalid or conflicting records",
+        ) from None
 
     return {"status": "ok", "imported": imported, "skipped": skipped}

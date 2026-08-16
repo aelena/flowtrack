@@ -1,8 +1,6 @@
-import asyncio
 import os
 import tempfile
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -13,9 +11,7 @@ os.environ["API_KEY"] = "test_key"
 # The setup_db fixture below runs drop_all after every single test. Pointing it
 # at a real database destroys it. Default to a dedicated `_test` database and
 # refuse to start if the target does not look like a throwaway.
-DEFAULT_TEST_DB = (
-    "postgresql+asyncpg://flowtrack:flowtrack_secret@localhost:7029/flowtrack_test"
-)
+DEFAULT_TEST_DB = "postgresql+asyncpg://flowtrack:flowtrack_secret@localhost:7029/flowtrack_test"
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB)
 
 _db_name = TEST_DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]

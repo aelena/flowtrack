@@ -1,4 +1,3 @@
-import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,8 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Project, LLMProvider, TaskStatus
-from ..schemas import LLMProviderCreate, LLMProviderOut, ChatMessage, GenerateRequest
+from ..models import LLMProvider, Project
+from ..schemas import ChatMessage, LLMProviderCreate, LLMProviderOut
 
 router = APIRouter(prefix="/api/llm", tags=["llm"], dependencies=[Depends(verify_api_key)])
 
