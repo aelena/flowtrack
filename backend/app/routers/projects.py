@@ -2,7 +2,7 @@ import io
 import json
 import os
 import zipfile
-from datetime import datetime as dt
+from datetime import datetime as dt, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,7 +15,7 @@ from ..config import settings
 from ..database import get_db
 from ..dependencies import verify_api_key
 from ..models import Project, Task, TaskStatus, ProjectStatus, Snippet
-from ..schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectListOut
+from ..schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectListOut, CollaboratorCreate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_api_key)])
 
@@ -48,7 +48,8 @@ async def list_projects(
     if tag:
         query = query.where(Project.tags.contains([tag]))
 
-    sort_col = getattr(Project, sort_by, Project.created_at)
+    ALLOWED_SORT = {"created_at", "work_name", "star_rating", "updated_at", "subjective_completion"}
+    sort_col = getattr(Project, sort_by) if sort_by in ALLOWED_SORT else Project.created_at
     if sort_order == "asc":
         query = query.order_by(sort_col.asc())
     else:
@@ -194,7 +195,7 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
     buf.seek(0)
     name = project.work_name.replace(" ", "_")
-    ts = dt.utcnow().strftime("%Y%m%d-%H%M%S")
+    ts = dt.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d-%H%M%S")
     filename = f"{name}-{ts}.zip"
     return StreamingResponse(
         buf,
@@ -228,7 +229,7 @@ async def get_pending(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{project_id}/collaborators", response_model=ProjectOut)
-async def add_collaborator(project_id: UUID, collaborator: dict, db: AsyncSession = Depends(get_db)):
+async def add_collaborator(project_id: UUID, collaborator: CollaboratorCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
     )
@@ -236,7 +237,7 @@ async def add_collaborator(project_id: UUID, collaborator: dict, db: AsyncSessio
     if not project:
         raise HTTPException(404, "Project not found")
     collabs = list(project.collaborators or [])
-    collabs.append(collaborator)
+    collabs.append(collaborator.model_dump())
     project.collaborators = collabs
     await db.commit()
     await db.refresh(project)

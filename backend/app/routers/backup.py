@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Body, HTTPException
@@ -118,7 +118,7 @@ async def export_all(db: AsyncSession = Depends(get_db)):
 
     return {
         "version": "1.0",
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "areas": areas,
         "projects": projects,
         "snippets": snippets,
@@ -285,8 +285,8 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
 
         await db.commit()
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
+        raise HTTPException(status_code=400, detail="Import failed: the uploaded data contains invalid or conflicting records")
 
     return {"status": "ok", "imported": imported}

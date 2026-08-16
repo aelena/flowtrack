@@ -1,11 +1,29 @@
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
 from .routers import areas, projects, tasks, notes, files, extension, llm, config, backup
+
+logger = logging.getLogger("flowtrack")
+
+PROBLEM_JSON = "application/problem+json"
+
+HTTP_STATUS_PHRASES = {
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    409: "Conflict",
+    413: "Content Too Large",
+    422: "Unprocessable Content",
+    500: "Internal Server Error",
+}
 
 
 @asynccontextmanager
@@ -23,6 +41,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "type": "about:blank",
+            "title": HTTP_STATUS_PHRASES.get(exc.status_code, "Error"),
+            "status": exc.status_code,
+            "detail": exc.detail,
+        },
+        media_type=PROBLEM_JSON,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    first = errors[0] if errors else {}
+    field = " -> ".join(str(l) for l in first.get("loc", [])) if first else "unknown"
+    msg = first.get("msg", "Validation error")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "type": "about:blank",
+            "title": "Unprocessable Content",
+            "status": 422,
+            "detail": f"{field}: {msg}",
+            "errors": [
+                {
+                    "field": " -> ".join(str(l) for l in e.get("loc", [])),
+                    "message": e.get("msg", ""),
+                }
+                for e in errors
+            ],
+        },
+        media_type=PROBLEM_JSON,
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "type": "about:blank",
+            "title": "Internal Server Error",
+            "status": 500,
+            "detail": "An unexpected error occurred",
+        },
+        media_type=PROBLEM_JSON,
+    )
+
 
 app.include_router(areas.router)
 app.include_router(projects.router)

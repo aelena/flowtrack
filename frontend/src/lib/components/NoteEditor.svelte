@@ -1,5 +1,5 @@
 <script>
-  import { language } from '../stores.js';
+  import { language, showToast } from '../stores.js';
   import { listNotes, createNote, updateNote, deleteNote } from '../api.js';
   import { t } from '../i18n.js';
   import { renderMarkdown } from '../markdown.js';
@@ -12,38 +12,43 @@
   let editContent = '';
   let newContent = '';
   let showNew = false;
-  let lang = 'en';
-
-  language.subscribe(v => lang = v);
 
   async function load() {
     const params = {};
     if (projectId) params.project_id = projectId;
     if (taskId) params.task_id = taskId;
-    notes = await listNotes(params);
+    try {
+      notes = await listNotes(params);
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleCreate() {
     if (!newContent.trim()) return;
-    const data = { content: newContent };
-    if (projectId) data.project_id = projectId;
-    if (taskId) data.task_id = taskId;
-    await createNote(data);
-    newContent = '';
-    showNew = false;
-    await load();
+    try {
+      const data = { content: newContent };
+      if (projectId) data.project_id = projectId;
+      if (taskId) data.task_id = taskId;
+      await createNote(data);
+      newContent = '';
+      showNew = false;
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleUpdate() {
     if (!editContent.trim()) return;
-    await updateNote(editingId, editContent);
-    editingId = null;
-    await load();
+    try {
+      await updateNote(editingId, editContent);
+      editingId = null;
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleDelete(id) {
-    await deleteNote(id);
-    await load();
+    try {
+      await deleteNote(id);
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   function startEdit(note) {
@@ -56,16 +61,16 @@
 
 <div class="notes-section">
   <div class="notes-header">
-    <h3>{t('notes', lang)}</h3>
-    <button class="primary small" on:click={() => showNew = !showNew}>+ {t('newNote', lang)}</button>
+    <h3>{t('notes', $language)}</h3>
+    <button class="primary small" on:click={() => showNew = !showNew}>+ {t('newNote', $language)}</button>
   </div>
 
   {#if showNew}
     <div class="note-form">
       <textarea bind:value={newContent} placeholder="Write markdown..." rows="4"></textarea>
       <div class="form-actions">
-        <button class="primary small" on:click={handleCreate}>{t('save', lang)}</button>
-        <button class="small" on:click={() => showNew = false}>{t('cancel', lang)}</button>
+        <button class="primary small" on:click={handleCreate}>{t('save', $language)}</button>
+        <button class="small" on:click={() => showNew = false}>{t('cancel', $language)}</button>
       </div>
     </div>
   {/if}
@@ -75,14 +80,14 @@
       {#if editingId === note.id}
         <textarea bind:value={editContent} rows="4"></textarea>
         <div class="form-actions">
-          <button class="primary small" on:click={handleUpdate}>{t('save', lang)}</button>
-          <button class="small" on:click={() => editingId = null}>{t('cancel', lang)}</button>
+          <button class="primary small" on:click={handleUpdate}>{t('save', $language)}</button>
+          <button class="small" on:click={() => editingId = null}>{t('cancel', $language)}</button>
         </div>
       {:else}
         <div class="note-content">{@html renderMarkdown(note.content)}</div>
         <div class="note-actions">
           <button class="icon-btn" on:click={() => startEdit(note)}>Edit</button>
-          <button class="icon-btn danger" on:click={() => handleDelete(note.id)}>{t('delete', lang)}</button>
+          <button class="icon-btn danger" on:click={() => handleDelete(note.id)}>{t('delete', $language)}</button>
           <span class="note-date">{new Date(note.created_at).toLocaleDateString()}</span>
         </div>
       {/if}

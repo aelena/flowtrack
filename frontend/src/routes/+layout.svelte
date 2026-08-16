@@ -3,6 +3,7 @@
   import { theme, language, font, sidebarOpen } from '$lib/stores.js';
   import { t } from '$lib/i18n.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import Toast from '$lib/components/Toast.svelte';
   import { onMount } from 'svelte';
 
   onMount(() => {
@@ -63,6 +64,8 @@
     </main>
   </div>
 </div>
+
+<Toast />
 
 <style>
   .app-layout {

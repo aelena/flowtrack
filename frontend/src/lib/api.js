@@ -12,6 +12,11 @@ function headers() {
   };
 }
 
+function extractDetail(body, fallback) {
+  if (body && typeof body === 'object' && body.detail) return body.detail;
+  return fallback;
+}
+
 async function request(method, path, body = null) {
   const opts = { method, headers: headers() };
   if (body && method !== 'GET') {
@@ -20,11 +25,13 @@ async function request(method, path, body = null) {
   const resp = await fetch(`${BASE_URL}${path}`, opts);
   if (resp.status === 204) return null;
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new Error(err.detail || 'Request failed');
+    const err = await resp.json().catch(() => null);
+    throw new Error(extractDetail(err, resp.statusText));
   }
   const contentType = resp.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) return resp.json();
+  if (contentType.includes('application/json') || contentType.includes('application/problem+json')) {
+    return resp.json();
+  }
   return resp;
 }
 
@@ -87,6 +94,10 @@ export const uploadFile = async (projectId, file, folder = null) => {
     headers: { 'X-API-Key': get(apiKey) },
     body: formData,
   });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => null);
+    throw new Error(extractDetail(err, 'File upload failed'));
+  }
   return resp.json();
 };
 export const deleteFile = (projectId, fileId) =>

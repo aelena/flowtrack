@@ -1,8 +1,9 @@
 <script>
   import { onMount } from 'svelte';
-  import { language, apiKey } from '$lib/stores.js';
+  import { language, apiKey, showToast } from '$lib/stores.js';
   import { getConfigYaml, putConfigYaml, resetConfig, exportBackup, importBackup } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
+  import { tsFilename } from '$lib/utils.js';
 
   let yamlContent = '';
   let status = '';
@@ -48,11 +49,13 @@
   }
 
   async function handleReset() {
-    const data = await resetConfig();
-    await loadConfig();
-    status = 'Configuration reset to defaults';
-    statusType = 'success';
-    setTimeout(() => status = '', 3000);
+    try {
+      await resetConfig();
+      await loadConfig();
+      status = 'Configuration reset to defaults';
+      statusType = 'success';
+      setTimeout(() => status = '', 3000);
+    } catch (e) { showToast(e.message); }
   }
 
   let importInput;
@@ -70,14 +73,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const d = new Date();
-      const ts = d.getFullYear().toString()
-        + String(d.getMonth() + 1).padStart(2, '0')
-        + String(d.getDate()).padStart(2, '0')
-        + '-' + String(d.getHours()).padStart(2, '0')
-        + String(d.getMinutes()).padStart(2, '0')
-        + String(d.getSeconds()).padStart(2, '0');
-      a.download = `flowtrack-backup-${ts}.json`;
+      a.download = tsFilename('flowtrack-backup', 'json');
       a.click();
       URL.revokeObjectURL(url);
       importStatus = 'Backup exported successfully';

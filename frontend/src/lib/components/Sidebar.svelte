@@ -1,8 +1,9 @@
 <script>
   import { onMount } from 'svelte';
-  import { projects, areas, sidebarOpen, language } from '../stores.js';
+  import { projects, areas, sidebarOpen, language, showToast } from '../stores.js';
   import { listProjects, listAreas, getAllTags, createProject, createArea, updateArea, deleteArea, updateProject, archiveProject, exportProject } from '../api.js';
   import { t } from '../i18n.js';
+  import { tsFilename } from '../utils.js';
   import { goto } from '$app/navigation';
 
   let search = '';
@@ -42,32 +43,40 @@
 
   async function handleCreateProject() {
     if (!newProjectName.trim()) return;
-    const created = await createProject({ work_name: newProjectName });
-    newProjectName = '';
-    showNewProject = false;
-    await loadData();
-    if (created?.id) goto(`/projects/${created.id}`);
+    try {
+      const created = await createProject({ work_name: newProjectName });
+      newProjectName = '';
+      showNewProject = false;
+      await loadData();
+      if (created?.id) goto(`/projects/${created.id}`);
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleCreateArea() {
     if (!newAreaName.trim()) return;
-    await createArea(newAreaName);
-    newAreaName = '';
-    showNewArea = false;
-    await loadData();
+    try {
+      await createArea(newAreaName);
+      newAreaName = '';
+      showNewArea = false;
+      await loadData();
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleRenameArea(areaId) {
     if (!editingAreaName.trim()) return;
-    await updateArea(areaId, editingAreaName);
-    editingAreaId = null;
-    editingAreaName = '';
-    await loadData();
+    try {
+      await updateArea(areaId, editingAreaName);
+      editingAreaId = null;
+      editingAreaName = '';
+      await loadData();
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleDeleteArea(areaId) {
-    await deleteArea(areaId);
-    await loadData();
+    try {
+      await deleteArea(areaId);
+      await loadData();
+    } catch (e) { showToast(e.message); }
   }
 
   function selectProject(id) {
@@ -93,39 +102,33 @@
   async function quickArchive(e, projectId) {
     e.stopPropagation();
     activeMenu = null;
-    await archiveProject(projectId);
-    await loadData();
-  }
-
-  function tsFilename(name, ext) {
-    const slug = (name || 'project').replace(/\s+/g, '_');
-    const d = new Date();
-    const ts = d.getFullYear().toString()
-      + String(d.getMonth() + 1).padStart(2, '0')
-      + String(d.getDate()).padStart(2, '0')
-      + '-' + String(d.getHours()).padStart(2, '0')
-      + String(d.getMinutes()).padStart(2, '0')
-      + String(d.getSeconds()).padStart(2, '0');
-    return `${slug}-${ts}.${ext}`;
+    try {
+      await archiveProject(projectId);
+      await loadData();
+    } catch (err) { showToast(err.message); }
   }
 
   async function quickExport(e, projectId, projectName) {
     e.stopPropagation();
     activeMenu = null;
-    const blob = await exportProject(projectId);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = tsFilename(projectName, 'zip');
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await exportProject(projectId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = tsFilename(projectName, 'zip');
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { showToast(err.message); }
   }
 
   async function quickSetStatus(e, projectId, status) {
     e.stopPropagation();
     activeMenu = null;
-    await updateProject(projectId, { status });
-    await loadData();
+    try {
+      await updateProject(projectId, { status });
+      await loadData();
+    } catch (err) { showToast(err.message); }
   }
 
   // Drag and drop
@@ -139,17 +142,21 @@
     e.preventDefault();
     const pid = e.dataTransfer.getData('text/plain') || dragProjectId;
     if (!pid) return;
-    await updateProject(pid, { area_id: areaId });
-    dragProjectId = null;
-    await loadData();
+    try {
+      await updateProject(pid, { area_id: areaId });
+      dragProjectId = null;
+      await loadData();
+    } catch (err) { showToast(err.message); dragProjectId = null; }
   }
   async function onDropToUngrouped(e) {
     e.preventDefault();
     const pid = e.dataTransfer.getData('text/plain') || dragProjectId;
     if (!pid) return;
-    await updateProject(pid, { area_id: null });
-    dragProjectId = null;
-    await loadData();
+    try {
+      await updateProject(pid, { area_id: null });
+      dragProjectId = null;
+      await loadData();
+    } catch (err) { showToast(err.message); dragProjectId = null; }
   }
   function onDragEnd() { dragProjectId = null; }
 
