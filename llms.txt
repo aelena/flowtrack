@@ -16,7 +16,8 @@ Run it with `cp .env.example .env && docker compose up --build`. The `.env` step
 - [main.py](backend/app/main.py): FastAPI app, router wiring, and RFC 7807 problem+json exception handlers.
 - [models.py](backend/app/models.py): Area, Project, Task, Note, ProjectFile, Snippet, LLMProvider. Timestamps are timezone-aware.
 - [schemas.py](backend/app/schemas.py): Pydantic request and response models. Status fields are typed with their enums, which is what makes an invalid value a 422 rather than a 500.
-- [database.py](backend/app/database.py): Async SQLAlchemy setup plus hand-rolled idempotent migrations. Documented as a stopgap; Alembic is the intended replacement.
+- [database.py](backend/app/database.py): Async SQLAlchemy setup. On startup it runs Alembic migrations, and adopts a pre-Alembic database by stamping the base revision before migrating forward.
+- [alembic/](backend/alembic/): Migrations. `env.py` takes its URL from the app settings, so there is one source of truth for the connection string.
 - [redaction.py](backend/app/redaction.py): Redacts provider secrets on the way out and restores them when an edited config is written back.
 - [routers/projects.py](backend/app/routers/projects.py): Project CRUD, archive and unarchive, ZIP export, pending summary.
 - [routers/tasks.py](backend/app/routers/tasks.py): Task CRUD, including bulk creation by parsing a pasted markdown list.
