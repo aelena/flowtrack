@@ -5,6 +5,16 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<title>FlowTrack</title>
+		<script>
+			// Apply the stored theme and font before first paint, otherwise a dark-mode
+			// user gets a flash of the light theme while the app hydrates.
+			try {
+				var t = JSON.parse(localStorage.getItem('flowtrack:theme'));
+				if (t) document.documentElement.setAttribute('data-theme', t);
+				var f = JSON.parse(localStorage.getItem('flowtrack:font'));
+				if (f) document.documentElement.style.setProperty('--font-family', "'" + f + "', system-ui, sans-serif");
+			} catch (e) {}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
