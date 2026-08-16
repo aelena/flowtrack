@@ -2,8 +2,16 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Local development (docker compose) sets this to "true" so the test suite and
+# linters are available inside the container. Production builds leave it false
+# and get runtime dependencies only.
+ARG INSTALL_DEV=false
+
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt && \
+    if [ "$INSTALL_DEV" = "true" ]; then \
+      pip install --no-cache-dir -r requirements-dev.txt; \
+    fi
 
 COPY . .
 
