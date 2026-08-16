@@ -90,7 +90,13 @@
       const data = JSON.parse(text);
       const result = await importBackup(data);
       const i = result.imported;
-      importStatus = `Imported: ${i.areas} areas, ${i.projects} projects, ${i.tasks} tasks, ${i.notes} notes, ${i.snippets} snippets`;
+      const s = result.skipped || {};
+      const skippedTotal = Object.values(s).reduce((a, b) => a + b, 0);
+      importStatus =
+        `Imported: ${i.areas} areas, ${i.projects} projects, ${i.tasks} tasks, ${i.notes} notes, ${i.snippets} snippets` +
+        (skippedTotal
+          ? ` — skipped ${skippedTotal} record${skippedTotal === 1 ? '' : 's'} that already existed`
+          : '');
       importStatusType = 'success';
     } catch (e) {
       importStatus = 'Import failed: ' + e.message;
