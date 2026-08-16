@@ -17,6 +17,7 @@ from ..schemas import FileOut
 router = APIRouter(prefix="/api/projects/{project_id}/files", tags=["files"], dependencies=[Depends(verify_api_key)])
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+CHUNK_SIZE = 1024 * 1024  # read uploads a MiB at a time
 
 
 def _sanitize_folder(folder: str | None) -> str | None:
@@ -62,11 +63,31 @@ async def upload_file(
 
     os.makedirs(store_dir, exist_ok=True)
 
-    unique_name = f"{uuid_mod.uuid4().hex}_{file.filename}"
+    # basename() so a crafted filename such as "../../evil" cannot climb out of
+    # the project directory once it is joined onto store_dir.
+    original_name = os.path.basename(file.filename or "upload.bin")
+    unique_name = f"{uuid_mod.uuid4().hex}_{original_name}"
     full_path = os.path.join(store_dir, unique_name)
 
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
+    # Stream to disk in chunks and stop as soon as the limit is passed. Reading
+    # the whole upload into memory first meant a large file exhausted the
+    # container before the size check ever ran.
+    total = 0
+    too_large = False
+    with open(full_path, "wb") as out:
+        while True:
+            chunk = await file.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_UPLOAD_SIZE:
+                too_large = True
+                break
+            out.write(chunk)
+
+    if too_large:
+        if os.path.exists(full_path):
+            os.remove(full_path)
         raise HTTPException(413, f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB")
 
     # Relative path for DB
@@ -74,7 +95,7 @@ async def upload_file(
 
     pf = ProjectFile(
         project_id=project_id,
-        filename=file.filename,
+        filename=original_name,
         file_type=ext,
         file_path=rel_path,
         folder=safe_folder,
