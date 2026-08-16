@@ -1,9 +1,10 @@
 import { get } from 'svelte/store';
 import { apiKey } from './stores.js';
 
-const BASE_URL = typeof window !== 'undefined'
-  ? (window.__PUBLIC_API_URL || 'http://localhost:7028')
-  : (process.env.INTERNAL_API_URL || 'http://api:8000');
+const BASE_URL =
+  typeof window !== 'undefined'
+    ? window.__PUBLIC_API_URL || 'http://localhost:7028'
+    : process.env.INTERNAL_API_URL || 'http://api:8000';
 
 function headers() {
   return {
@@ -29,7 +30,10 @@ async function request(method, path, body = null) {
     throw new Error(extractDetail(err, resp.statusText));
   }
   const contentType = resp.headers.get('content-type') || '';
-  if (contentType.includes('application/json') || contentType.includes('application/problem+json')) {
+  if (
+    contentType.includes('application/json') ||
+    contentType.includes('application/problem+json')
+  ) {
     return resp.json();
   }
   return resp;
@@ -66,7 +70,8 @@ export const exportProject = async (id) => {
   return resp.blob();
 };
 export const getPending = (id) => request('GET', `/api/projects/${id}/pending`);
-export const addCollaborator = (id, collab) => request('POST', `/api/projects/${id}/collaborators`, collab);
+export const addCollaborator = (id, collab) =>
+  request('POST', `/api/projects/${id}/collaborators`, collab);
 
 // Tasks
 export const listTasks = (projectId) => request('GET', `/api/projects/${projectId}/tasks/`);

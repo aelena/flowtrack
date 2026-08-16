@@ -7,7 +7,7 @@ const ESCAPE_MAP = {
 };
 
 function escapeHtml(text) {
-  return text.replace(/[&<>"']/g, ch => ESCAPE_MAP[ch]);
+  return text.replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch]);
 }
 
 export function renderMarkdown(text) {

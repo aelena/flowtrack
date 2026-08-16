@@ -20,7 +20,7 @@
   --transition: 0.2s ease;
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   --bg: #1a1a2e;
   --bg-secondary: #16213e;
   --bg-tertiary: #0f3460;
@@ -39,13 +39,16 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   font-family: var(--font-family);
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 a {
@@ -83,7 +86,9 @@ button.primary:hover {
   background: var(--accent-hover);
 }
 
-input, textarea, select {
+input,
+textarea,
+select {
   font-family: inherit;
   font-size: 0.875rem;
   padding: 0.5rem 0.75rem;
@@ -95,7 +100,9 @@ input, textarea, select {
   width: 100%;
 }
 
-input:focus, textarea:focus, select:focus {
+input:focus,
+textarea:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -113,9 +120,18 @@ textarea {
   font-weight: 500;
 }
 
-.badge.new { background: var(--info); color: white; }
-.badge.in_progress { background: var(--warning); color: white; }
-.badge.done { background: var(--success); color: white; }
+.badge.new {
+  background: var(--info);
+  color: white;
+}
+.badge.in_progress {
+  background: var(--warning);
+  color: white;
+}
+.badge.done {
+  background: var(--success);
+  color: white;
+}
 
 .progress-bar {
   height: 8px;
@@ -160,15 +176,24 @@ textarea {
   gap: 2px;
 }
 
-.stars span {
+.stars button {
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 1;
   cursor: pointer;
   font-size: 1.25rem;
   color: var(--text-muted);
   transition: color var(--transition);
 }
 
-.stars span.active {
+.stars button.active {
   color: #f5a623;
+}
+
+.stars button:focus-visible {
+  outline: 2px solid var(--text-secondary);
+  outline-offset: 2px;
 }
 
 ::-webkit-scrollbar {

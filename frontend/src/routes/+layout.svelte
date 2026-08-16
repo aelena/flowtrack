@@ -1,27 +1,29 @@
 <script>
   import '../app.css';
   import { theme, language, font, sidebarOpen } from '$lib/stores.js';
-  import { t } from '$lib/i18n.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import { onMount } from 'svelte';
 
   onMount(() => {
-    const unsubTheme = theme.subscribe(v => {
+    const unsubTheme = theme.subscribe((v) => {
       document.documentElement.setAttribute('data-theme', v);
     });
-    const unsubFont = font.subscribe(v => {
+    const unsubFont = font.subscribe((v) => {
       document.documentElement.style.setProperty('--font-family', `'${v}', system-ui, sans-serif`);
     });
-    return () => { unsubTheme(); unsubFont(); };
+    return () => {
+      unsubTheme();
+      unsubFont();
+    };
   });
 
   function toggleTheme() {
-    theme.update(v => v === 'light' ? 'dark' : 'light');
+    theme.update((v) => (v === 'light' ? 'dark' : 'light'));
   }
 
   function toggleLang() {
-    language.update(v => v === 'en' ? 'es' : 'en');
+    language.update((v) => (v === 'en' ? 'es' : 'en'));
   }
 </script>
 
@@ -54,7 +56,19 @@
         </button>
 
         <a href="/settings" class="toggle-btn settings-link" title="Settings">
-          <svg viewBox="0 0 16 16" width="14" height="14" style="vertical-align: middle;"><path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" fill="none" stroke-width="1.2"/><path d="M13.5 8c0-.3 0-.5-.1-.8l1.4-1.1-1.3-2.2-1.7.5c-.4-.3-.8-.6-1.3-.7L10 2H7.5l-.5 1.7c-.5.2-.9.4-1.3.7l-1.7-.5L2.7 6.1l1.4 1.1c-.1.3-.1.5-.1.8s0 .5.1.8L2.7 9.9 4 12.1l1.7-.5c.4.3.8.6 1.3.7L7.5 14H10l.5-1.7c.5-.2.9-.4 1.3-.7l1.7.5 1.3-2.2-1.4-1.1c.1-.3.1-.5.1-.8z" stroke="currentColor" fill="none" stroke-width="1.2"/></svg>
+          <svg viewBox="0 0 16 16" width="14" height="14" style="vertical-align: middle;"
+            ><path
+              d="M8 10a2 2 0 100-4 2 2 0 000 4z"
+              stroke="currentColor"
+              fill="none"
+              stroke-width="1.2"
+            /><path
+              d="M13.5 8c0-.3 0-.5-.1-.8l1.4-1.1-1.3-2.2-1.7.5c-.4-.3-.8-.6-1.3-.7L10 2H7.5l-.5 1.7c-.5.2-.9.4-1.3.7l-1.7-.5L2.7 6.1l1.4 1.1c-.1.3-.1.5-.1.8s0 .5.1.8L2.7 9.9 4 12.1l1.7-.5c.4.3.8.6 1.3.7L7.5 14H10l.5-1.7c.5-.2.9-.4 1.3-.7l1.7.5 1.3-2.2-1.4-1.1c.1-.3.1-.5.1-.8z"
+              stroke="currentColor"
+              fill="none"
+              stroke-width="1.2"
+            /></svg
+          >
         </a>
       </div>
     </div>
@@ -91,7 +105,8 @@
     min-height: 44px;
   }
 
-  .toolbar-left, .toolbar-right {
+  .toolbar-left,
+  .toolbar-right {
     display: flex;
     gap: 0.5rem;
     align-items: center;
