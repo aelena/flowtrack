@@ -171,14 +171,31 @@ All endpoints require `X-API-Key` header.
 
 ## Running Tests
 
+> **The suite drops every table after each test.** It therefore defaults to a
+> separate `flowtrack_test` database and refuses to start if `TEST_DATABASE_URL`
+> points at a database whose name does not end in `_test`.
+
+Create the throwaway database once:
+
 ```bash
-# Ensure PostgreSQL is running on localhost:7029
-cd backend
-pip install -r requirements.txt
-pytest -v
+docker compose exec db psql -U flowtrack -d postgres -c 'CREATE DATABASE flowtrack_test;'
 ```
 
-Tests automatically create and drop tables, cleaning up after themselves.
+Then run the suite inside the API container (no local Python needed):
+
+```bash
+docker compose exec \
+  -e TEST_DATABASE_URL=postgresql+asyncpg://flowtrack:flowtrack_secret@db:5432/flowtrack_test \
+  api python -m pytest -q
+```
+
+Or from the host, against the published database port:
+
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -q          # uses localhost:7029/flowtrack_test by default
+```
 
 ## Project Structure
 
