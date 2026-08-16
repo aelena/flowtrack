@@ -4,6 +4,11 @@
   "version": "1.0.0",
   "description": "Clip URLs and text snippets to FlowTrack projects",
   "permissions": ["activeTab", "storage", "contextMenus"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": ["*://*/*"],
   "action": {
     "default_popup": "popup.html"
   },

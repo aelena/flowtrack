@@ -123,6 +123,16 @@ Located in `extension/`. Load as an unpacked extension in Chrome:
 4. Click the extension icon, configure API URL (`http://localhost:7028`) and API key
 5. Use the popup or right-click context menu ("Save to FlowTrack") to save URLs and text snippets to projects
 
+The manifest declares `host_permissions` for `localhost` and `127.0.0.1`, which
+is what lets the extension call the API at all — without it every request is
+blocked before it leaves the browser. If you run FlowTrack on another host,
+grant the optional permission for it, and add the extension origin to
+`CORS_ORIGINS`:
+
+```
+CORS_ORIGINS=http://localhost:7027,chrome-extension://<your-extension-id>
+```
+
 ## API Endpoints
 
 All endpoints require `X-API-Key` header.
