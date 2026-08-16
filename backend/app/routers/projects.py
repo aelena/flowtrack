@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from ..config import settings
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Project, Task, TaskStatus, ProjectStatus, Snippet
+from ..models import Project, Task, TaskStatus, Snippet
 from ..schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectListOut, CollaboratorCreate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_api_key)])
@@ -106,8 +106,6 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
     if not project:
         raise HTTPException(404, "Project not found")
     for field, value in data.model_dump(exclude_unset=True).items():
-        if field == 'status' and value is not None:
-            value = ProjectStatus(value)
         setattr(project, field, value)
     await db.commit()
     await db.refresh(project)

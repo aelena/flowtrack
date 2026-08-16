@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from .models import ProjectStatus, TaskStatus
+
 
 # --- Area ---
 class AreaCreate(BaseModel):
@@ -35,7 +37,7 @@ class ProjectCreate(BaseModel):
     subjective_completion: int = 0
     local_dir: Optional[str] = None
     area_id: Optional[UUID] = None
-    status: str = "active"
+    status: ProjectStatus = ProjectStatus.active
     tags: list[str] = []
     collaborators: list = []
 
@@ -54,7 +56,7 @@ class ProjectUpdate(BaseModel):
     subjective_completion: Optional[int] = None
     local_dir: Optional[str] = None
     area_id: Optional[UUID] = None
-    status: Optional[str] = None
+    status: Optional[ProjectStatus] = None
     tags: Optional[list[str]] = None
     collaborators: Optional[list] = None
 
@@ -75,7 +77,7 @@ class ProjectOut(BaseModel):
     local_dir: Optional[str]
     area_id: Optional[UUID]
     archived: bool
-    status: str
+    status: ProjectStatus
     tags: list[str]
     collaborators: list
     task_completion: float = 0.0
@@ -89,7 +91,7 @@ class ProjectListOut(BaseModel):
     final_name: Optional[str]
     area_id: Optional[UUID]
     archived: bool
-    status: str
+    status: ProjectStatus
     tags: list[str]
     star_rating: Optional[int]
     task_completion: float = 0.0
@@ -106,14 +108,14 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[TaskStatus] = None
 
 class TaskOut(BaseModel):
     id: UUID
     project_id: UUID
     title: str
     description: Optional[str]
-    status: str
+    status: TaskStatus
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}

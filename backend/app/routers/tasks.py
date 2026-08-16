@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Task, TaskStatus
+from ..models import Task
 from ..schemas import TaskCreate, TaskUpdate, TaskOut
 
 router = APIRouter(prefix="/api/projects/{project_id}/tasks", tags=["tasks"], dependencies=[Depends(verify_api_key)])
@@ -61,7 +61,7 @@ async def update_task(project_id: UUID, task_id: UUID, data: TaskUpdate, db: Asy
     if data.description is not None:
         task.description = data.description
     if data.status is not None:
-        task.status = TaskStatus(data.status)
+        task.status = data.status
     await db.commit()
     await db.refresh(task)
     return task
