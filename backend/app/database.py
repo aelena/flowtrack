@@ -28,6 +28,8 @@ async def get_db():
 # the sooner it happens — see IMPROVEMENT-PLAN.md.
 _MIGRATIONS = """
 DO $$
+DECLARE
+    r RECORD;
 BEGIN
     -- projects.status ------------------------------------------------------
     -- Older databases got this column as VARCHAR(20) from a previous version
@@ -67,6 +69,28 @@ BEGIN
     ) THEN
         ALTER TABLE projects ADD COLUMN tags JSONB DEFAULT '[]'::jsonb;
     END IF;
+
+    -- timezone-aware timestamps --------------------------------------------
+    -- Columns were originally created as `timestamp without time zone` and
+    -- written with naive UTC values, so the API emitted timestamps with no
+    -- offset and clients rendered them as local time. Convert in place,
+    -- interpreting the existing values as the UTC they always were.
+
+    FOR r IN
+        SELECT table_name, column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND data_type = 'timestamp without time zone'
+          AND table_name IN (
+              'areas', 'projects', 'tasks', 'notes',
+              'project_files', 'llm_providers', 'snippets'
+          )
+    LOOP
+        EXECUTE format(
+            'ALTER TABLE %I ALTER COLUMN %I TYPE timestamptz USING %I AT TIME ZONE ''UTC''',
+            r.table_name, r.column_name, r.column_name
+        );
+    END LOOP;
 END $$;
 """
 

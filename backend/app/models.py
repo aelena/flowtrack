@@ -13,7 +13,7 @@ from .database import Base
 
 
 def _utcnow():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(timezone.utc)
 
 
 class ProjectStatus(str, enum.Enum):
@@ -33,7 +33,7 @@ class Area(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), unique=True, nullable=False)
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     projects = relationship("Project", back_populates="area")
 
@@ -60,8 +60,8 @@ class Project(Base):
     status = Column(SAEnum(ProjectStatus), default=ProjectStatus.active)
     tags = Column(JSONB, default=list)
     collaborators = Column(JSONB, default=list)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     area = relationship("Area", back_populates="projects")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
@@ -77,8 +77,8 @@ class Task(Base):
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(SAEnum(TaskStatus), default=TaskStatus.new)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     project = relationship("Project", back_populates="tasks")
     notes = relationship("Note", back_populates="task", cascade="all, delete-orphan")
@@ -91,8 +91,8 @@ class Note(Base):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     project = relationship("Project", back_populates="notes")
     task = relationship("Task", back_populates="notes")
@@ -107,7 +107,7 @@ class ProjectFile(Base):
     file_type = Column(String(50), nullable=False)
     file_path = Column(String(1000), nullable=False)
     folder = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     project = relationship("Project", back_populates="files")
 
@@ -119,7 +119,7 @@ class LLMProvider(Base):
     name = Column(String(255), nullable=False)
     provider_type = Column(String(100), nullable=False)
     config = Column(JSONB, default=dict)
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class Snippet(Base):
@@ -130,4 +130,4 @@ class Snippet(Base):
     snippet_type = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
     source_url = Column(String(1000), nullable=True)
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
