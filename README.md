@@ -13,8 +13,11 @@ Personal project tracking tool with a minimalistic, zen-style interface. Combine
 ## Quick Start
 
 ```bash
-# 1. Configure
-# Edit .env with your preferred credentials and API key
+git clone https://github.com/aelena/flowtrack.git
+cd flowtrack
+
+# 1. Create your environment file (the defaults work as-is for local use)
+cp .env.example .env
 
 # 2. Build and run
 docker compose up --build
@@ -25,9 +28,13 @@ docker compose up --build
 # Database:  localhost:7029
 ```
 
+`.env` is gitignored. Without it, `docker compose` has no values for
+`POSTGRES_USER` and friends and the database container will not start — so
+step 1 is not optional.
+
 ## Environment Variables
 
-Set these in `.env`:
+Copy `.env.example` to `.env` and adjust:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
