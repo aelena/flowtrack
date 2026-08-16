@@ -1,5 +1,11 @@
 # FlowTrack
 
+[![CI](https://github.com/aelena/flowtrack/actions/workflows/ci.yml/badge.svg)](https://github.com/aelena/flowtrack/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](backend/)
+[![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white)](frontend/)
+[![PostgreSQL 16](https://img.shields.io/badge/postgres-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml)
+
 **A project tracker that makes you write down when to quit.**
 
 Every project here carries two fields no other tracker asks for: `abandonment_criteria`, written up front, before you are emotionally invested; and two separate completion figures — the objective one computed from tasks, and your own honest estimate. The gap between them is a diagnosis.
