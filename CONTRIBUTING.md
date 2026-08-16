@@ -43,6 +43,18 @@ CI runs all of that plus a full `docker compose up --wait` smoke test, so anythi
 
 **The test suite drops every table.** It defaults to a `flowtrack_test` database and refuses to run against anything whose name does not end in `_test`. Do not disable that guard; it exists because the README once instructed people to point the suite at their real data.
 
+## Changing the schema
+
+Migrations are Alembic, applied automatically on API startup. After editing a model:
+
+```bash
+docker compose exec api alembic revision --autogenerate -m "what changed"
+```
+
+Read what it generated before committing it — autogenerate is a good first draft and a poor final one, particularly around enum types and server defaults.
+
+Note that the test suite still builds its schema with `create_all` rather than by running migrations. That is faster, and both come from the same metadata, but it does mean a migration can be wrong in a way the tests will not catch. Worth knowing before you trust a green run.
+
 ## Style
 
 Ruff decides Python formatting, Prettier decides the frontend. Neither is up for debate — run them and move on.
