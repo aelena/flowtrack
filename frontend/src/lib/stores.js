@@ -55,8 +55,8 @@ let toastId = 0;
 
 export function showToast(message, type = 'error', duration = 4000) {
   const id = ++toastId;
-  toasts.update(t => [...t, { id, message, type }]);
+  toasts.update((t) => [...t, { id, message, type }]);
   setTimeout(() => {
-    toasts.update(t => t.filter(x => x.id !== id));
+    toasts.update((t) => t.filter((x) => x.id !== id));
   }, duration);
 }

@@ -57,17 +57,17 @@
     border-left: 3px solid var(--info);
   }
 
-  :global([data-theme="dark"]) .toast.error {
+  :global([data-theme='dark']) .toast.error {
     background: #3b1414;
     color: #f8b4b4;
   }
 
-  :global([data-theme="dark"]) .toast.success {
+  :global([data-theme='dark']) .toast.success {
     background: #14301a;
     color: #a5d6a7;
   }
 
-  :global([data-theme="dark"]) .toast.info {
+  :global([data-theme='dark']) .toast.info {
     background: #0d1b2a;
     color: #90caf9;
   }
@@ -86,7 +86,13 @@
   }
 
   @keyframes slide-in {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>

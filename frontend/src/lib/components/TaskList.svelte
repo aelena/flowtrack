@@ -13,7 +13,9 @@
     if (!projectId) return;
     try {
       tasks = await listTasks(projectId);
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function cycleStatus(task) {
@@ -21,23 +23,29 @@
     try {
       await updateTask(projectId, task.id, { status: next[task.status] });
       await load();
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function removeTask(taskId) {
     try {
       await deleteTask(projectId, taskId);
       await load();
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
-  $: load(), projectId;
+  $: (load(), projectId);
 </script>
 
 <div class="task-list">
   <div class="task-header">
     <h3>{t('tasks', $language)}</h3>
-    <button class="primary small" on:click={() => showAddModal = true}>+ {t('newTask', $language)}</button>
+    <button class="primary small" on:click={() => (showAddModal = true)}
+      >+ {t('newTask', $language)}</button
+    >
   </div>
 
   {#if tasks.length === 0}
@@ -46,7 +54,11 @@
     {#each tasks as task}
       <div class="task-item">
         <button class="status-btn badge {task.status}" on:click={() => cycleStatus(task)}>
-          {task.status === 'new' ? t('pending', $language) : task.status === 'in_progress' ? t('inProgress', $language) : t('done', $language)}
+          {task.status === 'new'
+            ? t('pending', $language)
+            : task.status === 'in_progress'
+              ? t('inProgress', $language)
+              : t('done', $language)}
         </button>
         <span class="task-title" class:done={task.status === 'done'}>{task.title}</span>
         <button class="icon-btn danger" on:click={() => removeTask(task.id)}>&#10005;</button>
@@ -56,7 +68,13 @@
 </div>
 
 {#if showAddModal}
-  <AddTaskModal {projectId} on:close={() => { showAddModal = false; load(); }} />
+  <AddTaskModal
+    {projectId}
+    on:close={() => {
+      showAddModal = false;
+      load();
+    }}
+  />
 {/if}
 
 <style>

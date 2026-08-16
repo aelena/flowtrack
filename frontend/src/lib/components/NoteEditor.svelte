@@ -19,7 +19,9 @@
     if (taskId) params.task_id = taskId;
     try {
       notes = await listNotes(params);
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function handleCreate() {
@@ -32,7 +34,9 @@
       newContent = '';
       showNew = false;
       await load();
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function handleUpdate() {
@@ -41,14 +45,18 @@
       await updateNote(editingId, editContent);
       editingId = null;
       await load();
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function handleDelete(id) {
     try {
       await deleteNote(id);
       await load();
-    } catch (e) { showToast(e.message); }
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   function startEdit(note) {
@@ -56,13 +64,15 @@
     editContent = note.content;
   }
 
-  $: load(), projectId, taskId;
+  $: (load(), projectId, taskId);
 </script>
 
 <div class="notes-section">
   <div class="notes-header">
     <h3>{t('notes', $language)}</h3>
-    <button class="primary small" on:click={() => showNew = !showNew}>+ {t('newNote', $language)}</button>
+    <button class="primary small" on:click={() => (showNew = !showNew)}
+      >+ {t('newNote', $language)}</button
+    >
   </div>
 
   {#if showNew}
@@ -70,7 +80,7 @@
       <textarea bind:value={newContent} placeholder="Write markdown..." rows="4"></textarea>
       <div class="form-actions">
         <button class="primary small" on:click={handleCreate}>{t('save', $language)}</button>
-        <button class="small" on:click={() => showNew = false}>{t('cancel', $language)}</button>
+        <button class="small" on:click={() => (showNew = false)}>{t('cancel', $language)}</button>
       </div>
     </div>
   {/if}
@@ -81,13 +91,20 @@
         <textarea bind:value={editContent} rows="4"></textarea>
         <div class="form-actions">
           <button class="primary small" on:click={handleUpdate}>{t('save', $language)}</button>
-          <button class="small" on:click={() => editingId = null}>{t('cancel', $language)}</button>
+          <button class="small" on:click={() => (editingId = null)}>{t('cancel', $language)}</button
+          >
         </div>
       {:else}
+        <!-- renderMarkdown() HTML-escapes its input before applying its own tags, so no
+             caller-supplied markup reaches the DOM. This matters: snippets arrive from
+             arbitrary web pages via the clipper. -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="note-content">{@html renderMarkdown(note.content)}</div>
         <div class="note-actions">
           <button class="icon-btn" on:click={() => startEdit(note)}>Edit</button>
-          <button class="icon-btn danger" on:click={() => handleDelete(note.id)}>{t('delete', $language)}</button>
+          <button class="icon-btn danger" on:click={() => handleDelete(note.id)}
+            >{t('delete', $language)}</button
+          >
           <span class="note-date">{new Date(note.created_at).toLocaleDateString()}</span>
         </div>
       {/if}
@@ -96,7 +113,9 @@
 </div>
 
 <style>
-  .notes-section { margin: 1rem 0; }
+  .notes-section {
+    margin: 1rem 0;
+  }
 
   .notes-header {
     display: flex;
@@ -105,8 +124,14 @@
     margin-bottom: 0.75rem;
   }
 
-  .notes-header h3 { font-size: 1rem; font-weight: 600; }
-  .small { font-size: 0.75rem; padding: 0.3rem 0.6rem; }
+  .notes-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .small {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+  }
 
   .note-form {
     margin-bottom: 1rem;
@@ -115,7 +140,11 @@
     border-radius: var(--radius);
   }
 
-  .form-actions { display: flex; gap: 0.25rem; margin-top: 0.5rem; }
+  .form-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
 
   .note-card {
     padding: 0.75rem;
@@ -152,8 +181,12 @@
     padding: 0;
   }
 
-  .icon-btn:hover { color: var(--accent); }
-  .icon-btn.danger:hover { color: var(--danger); }
+  .icon-btn:hover {
+    color: var(--accent);
+  }
+  .icon-btn.danger:hover {
+    color: var(--danger);
+  }
 
   .note-date {
     font-size: 0.7rem;
