@@ -114,15 +114,14 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
     return out
 
 
-@router.post("/{project_id}/archive", response_model=ProjectOut)
-async def archive_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def _set_archived(project_id: UUID, archived: bool, db: AsyncSession) -> ProjectOut:
     result = await db.execute(
         select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Project not found")
-    project.archived = True
+    project.archived = archived
     await db.commit()
     await db.refresh(project)
     out = ProjectOut.model_validate(project)
@@ -130,7 +129,18 @@ async def archive_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
     return out
 
 
-@router.post("/{project_id}/export")
+@router.post("/{project_id}/archive", response_model=ProjectOut)
+async def archive_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    return await _set_archived(project_id, True, db)
+
+
+@router.post("/{project_id}/unarchive", response_model=ProjectOut)
+async def unarchive_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Archiving was one-way: there was no route back out of the archive."""
+    return await _set_archived(project_id, False, db)
+
+
+@router.get("/{project_id}/export")
 async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Project)

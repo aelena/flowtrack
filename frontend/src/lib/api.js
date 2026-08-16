@@ -51,9 +51,12 @@ export const getProject = (id) => request('GET', `/api/projects/${id}`);
 export const createProject = (data) => request('POST', '/api/projects/', data);
 export const updateProject = (id, data) => request('PUT', `/api/projects/${id}`, data);
 export const archiveProject = (id) => request('POST', `/api/projects/${id}/archive`);
+export const unarchiveProject = (id) => request('POST', `/api/projects/${id}/unarchive`);
+export const setProjectArchived = (id, archived) =>
+  archived ? archiveProject(id) : unarchiveProject(id);
 export const exportProject = async (id) => {
   const resp = await fetch(`${BASE_URL}/api/projects/${id}/export`, {
-    method: 'POST',
+    method: 'GET',
     headers: { 'X-API-Key': get(apiKey) },
   });
   if (!resp.ok) {
