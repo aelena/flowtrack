@@ -2,7 +2,7 @@ import copy
 import os
 
 import yaml
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from ..config import settings
 from ..dependencies import verify_api_key
@@ -61,7 +61,7 @@ DEFAULT_CONFIG = {
 
 def _read_config() -> dict:
     if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r") as f:
+        with open(CONFIG_PATH) as f:
             return yaml.safe_load(f) or {}
     # deepcopy, not dict(): a shallow copy shares the nested provider and IDE
     # dicts with DEFAULT_CONFIG, so any caller mutating one would corrupt the
@@ -95,7 +95,7 @@ async def put_config_yaml(body: dict = Body(...)):
         # Fail with a status code. Returning 200 with an {"error": ...} body
         # broke the problem+json contract the rest of the API follows and left
         # the client unable to tell success from failure.
-        raise HTTPException(422, f"Invalid YAML: {e}")
+        raise HTTPException(422, f"Invalid YAML: {e}") from e
 
     if not isinstance(config, dict):
         raise HTTPException(422, "YAML must be a mapping at the top level")

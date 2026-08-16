@@ -3,7 +3,7 @@ import re
 import uuid as uuid_mod
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,9 @@ from ..dependencies import verify_api_key
 from ..models import ProjectFile
 from ..schemas import FileOut
 
-router = APIRouter(prefix="/api/projects/{project_id}/files", tags=["files"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/files", tags=["files"], dependencies=[Depends(verify_api_key)]
+)
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 CHUNK_SIZE = 1024 * 1024  # read uploads a MiB at a time

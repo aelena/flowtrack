@@ -1,6 +1,6 @@
 import pytest
-from .conftest import HEADERS
 
+from .conftest import HEADERS
 
 FLOWTRACK_IMPORT = {
     "version": "1.0",
@@ -89,9 +89,7 @@ async def test_import_full_payload(client):
     assert body["imported"]["snippets"] == 0
 
     # Verify project was created
-    resp = await client.get(
-        "/api/projects/f10a1b2c-0001-4000-8000-000000000001", headers=HEADERS
-    )
+    resp = await client.get("/api/projects/f10a1b2c-0001-4000-8000-000000000001", headers=HEADERS)
     assert resp.status_code == 200
     project = resp.json()
     assert project["work_name"] == "FlowTrack"
@@ -99,9 +97,7 @@ async def test_import_full_payload(client):
     assert project["area_id"] == "a1b2c3d4-0001-4000-8000-000000000001"
 
     # Verify tasks
-    resp = await client.get(
-        "/api/projects/f10a1b2c-0001-4000-8000-000000000001/tasks/", headers=HEADERS
-    )
+    resp = await client.get("/api/projects/f10a1b2c-0001-4000-8000-000000000001/tasks/", headers=HEADERS)
     assert resp.status_code == 200
     tasks = resp.json()
     assert len(tasks) == 3
@@ -109,9 +105,7 @@ async def test_import_full_payload(client):
     assert len(done_tasks) == 2
 
     # Verify notes
-    resp = await client.get(
-        "/api/notes/?project_id=f10a1b2c-0001-4000-8000-000000000001", headers=HEADERS
-    )
+    resp = await client.get("/api/notes/?project_id=f10a1b2c-0001-4000-8000-000000000001", headers=HEADERS)
     assert resp.status_code == 200
     notes = resp.json()
     assert len(notes) == 1
@@ -137,16 +131,10 @@ async def test_import_idempotent(client):
 async def test_export_then_import_roundtrip(client):
     """Create data, export it, and verify structure."""
     await client.post("/api/areas/", json={"name": "Roundtrip Area"}, headers=HEADERS)
-    resp = await client.post(
-        "/api/projects/", json={"work_name": "Roundtrip Project"}, headers=HEADERS
-    )
+    resp = await client.post("/api/projects/", json={"work_name": "Roundtrip Project"}, headers=HEADERS)
     pid = resp.json()["id"]
-    await client.post(
-        f"/api/projects/{pid}/tasks/", json={"content": "- Step 1\n- Step 2"}, headers=HEADERS
-    )
-    await client.post(
-        "/api/notes/", json={"project_id": pid, "content": "A note"}, headers=HEADERS
-    )
+    await client.post(f"/api/projects/{pid}/tasks/", json={"content": "- Step 1\n- Step 2"}, headers=HEADERS)
+    await client.post("/api/notes/", json={"project_id": pid, "content": "A note"}, headers=HEADERS)
 
     resp = await client.get("/api/backup/export", headers=HEADERS)
     assert resp.status_code == 200
@@ -180,9 +168,7 @@ async def test_import_minimal_payload(client):
     assert resp.status_code == 200, f"Import failed: {resp.text}"
     assert resp.json()["imported"]["projects"] == 1
 
-    resp = await client.get(
-        "/api/projects/00000000-0000-4000-8000-000000000099", headers=HEADERS
-    )
+    resp = await client.get("/api/projects/00000000-0000-4000-8000-000000000099", headers=HEADERS)
     assert resp.status_code == 200
     assert resp.json()["work_name"] == "Minimal Project"
 

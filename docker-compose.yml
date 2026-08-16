@@ -33,8 +33,13 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    # Bind the source in for development: run the tests, ruff, or edit code
+    # without rebuilding the image. The named volume below still owns
+    # /app/storage so uploads survive.
     volumes:
+      - ./backend:/app
       - storage:/app/storage
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   frontend:
     build:
