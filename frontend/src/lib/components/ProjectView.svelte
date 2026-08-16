@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { language } from '../stores.js';
+  import { language, showToast } from '../stores.js';
   import { getProject, updateProject, archiveProject, listFiles, uploadFile, deleteFile } from '../api.js';
   import { t } from '../i18n.js';
   import TaskList from './TaskList.svelte';
@@ -29,9 +29,11 @@
 
   async function load() {
     if (!projectId) return;
-    project = await getProject(projectId);
-    writeContent = project.description || '';
-    await loadFiles();
+    try {
+      project = await getProject(projectId);
+      writeContent = project.description || '';
+      await loadFiles();
+    } catch (e) { showToast(e.message); }
   }
 
   async function loadFiles() {
@@ -61,7 +63,7 @@
       editing = false;
       await load();
     } catch (e) {
-      console.error('Save failed:', e);
+      showToast(e.message);
     }
   }
 
@@ -84,45 +86,57 @@
   }
 
   async function setRating(n) {
-    await updateProject(projectId, { star_rating: n });
-    await load();
+    try {
+      await updateProject(projectId, { star_rating: n });
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   async function handleArchive() {
-    await archiveProject(projectId);
-    await load();
+    try {
+      await archiveProject(projectId);
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   async function addTag() {
     const tag = newTag.trim().toLowerCase();
     if (!tag || (project.tags || []).includes(tag)) { newTag = ''; return; }
-    const tags = [...(project.tags || []), tag];
-    await updateProject(projectId, { tags });
-    newTag = '';
-    showTagInput = false;
-    await load();
+    try {
+      const tags = [...(project.tags || []), tag];
+      await updateProject(projectId, { tags });
+      newTag = '';
+      showTagInput = false;
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   async function removeTag(tag) {
-    const tags = (project.tags || []).filter(t => t !== tag);
-    await updateProject(projectId, { tags });
-    await load();
+    try {
+      const tags = (project.tags || []).filter(t => t !== tag);
+      await updateProject(projectId, { tags });
+      await load();
+    } catch (e) { showToast(e.message); }
   }
 
   // File tree actions
   async function handleFileUpload(e) {
     const selected = e.target.files;
     if (!selected?.length) return;
-    for (const file of selected) {
-      await uploadFile(projectId, file, fileFolder || null);
-    }
-    fileInput.value = '';
-    await loadFiles();
+    try {
+      for (const file of selected) {
+        await uploadFile(projectId, file, fileFolder || null);
+      }
+      fileInput.value = '';
+      await loadFiles();
+    } catch (err) { showToast(err.message); }
   }
 
   async function handleFileDelete(fileId) {
-    await deleteFile(projectId, fileId);
-    await loadFiles();
+    try {
+      await deleteFile(projectId, fileId);
+      await loadFiles();
+    } catch (e) { showToast(e.message); }
   }
 
   function toggleFileFolder(name) {

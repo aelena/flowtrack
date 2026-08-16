@@ -155,6 +155,12 @@ class FileOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# --- Collaborator ---
+class CollaboratorCreate(BaseModel):
+    name: str
+    role: Optional[str] = None
+
+
 # --- Snippet ---
 class SnippetCreate(BaseModel):
     project_id: UUID

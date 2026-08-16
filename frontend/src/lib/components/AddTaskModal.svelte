@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { createTasks } from '../api.js';
+  import { showToast } from '../stores.js';
 
   export let projectId;
 
@@ -10,8 +11,10 @@
 
   async function handleSubmit() {
     if (!content.trim()) return;
-    await createTasks(projectId, content, description || null);
-    dispatch('close');
+    try {
+      await createTasks(projectId, content, description || null);
+      dispatch('close');
+    } catch (e) { showToast(e.message); }
   }
 
   function handleKeydown(e) {
