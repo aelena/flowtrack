@@ -33,15 +33,12 @@
 
   async function saveConfig() {
     try {
-      const result = await putConfigYaml(yamlContent);
-      if (result.error) {
-        status = result.error;
-        statusType = 'error';
-      } else {
-        status = 'Configuration saved';
-        statusType = 'success';
-      }
+      await putConfigYaml(yamlContent);
+      status = 'Configuration saved';
+      statusType = 'success';
     } catch (e) {
+      // Invalid YAML now comes back as a 422 with a problem+json detail rather
+      // than a 200 carrying an { error } body.
       status = 'Save failed: ' + e.message;
       statusType = 'error';
     }
