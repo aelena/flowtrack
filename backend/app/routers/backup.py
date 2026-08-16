@@ -118,7 +118,7 @@ async def export_all(db: AsyncSession = Depends(get_db)):
 
     return {
         "version": "1.0",
-        "exported_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "areas": areas,
         "projects": projects,
         "snippets": snippets,

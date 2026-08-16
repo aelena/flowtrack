@@ -193,7 +193,7 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
     buf.seek(0)
     name = project.work_name.replace(" ", "_")
-    ts = dt.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d-%H%M%S")
+    ts = dt.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     filename = f"{name}-{ts}.zip"
     return StreamingResponse(
         buf,
