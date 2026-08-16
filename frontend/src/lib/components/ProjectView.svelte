@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { language, showToast } from '../stores.js';
-  import { getProject, updateProject, archiveProject, listFiles, uploadFile, deleteFile } from '../api.js';
+  import { getProject, updateProject, setProjectArchived, listFiles, uploadFile, deleteFile } from '../api.js';
   import { t } from '../i18n.js';
   import TaskList from './TaskList.svelte';
   import NoteEditor from './NoteEditor.svelte';
@@ -94,7 +94,9 @@
 
   async function handleArchive() {
     try {
-      await archiveProject(projectId);
+      // The button already offered "Unarchive" for archived projects but always
+      // called archive, so there was no way back out of the archive.
+      await setProjectArchived(projectId, !project.archived);
       await load();
     } catch (e) { showToast(e.message); }
   }
