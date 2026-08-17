@@ -88,16 +88,3 @@ async def test_invalid_yaml_is_rejected(client):
 async def test_yaml_must_be_a_mapping(client):
     resp = await client.put("/api/config/yaml", json={"yaml": "- a\n- b"}, headers=HEADERS)
     assert resp.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_provider_config_is_redacted(client):
-    await client.post(
-        "/api/llm/providers",
-        json={"name": "Test", "provider_type": "openai", "config": {"api_key": REAL_KEY}},
-        headers=HEADERS,
-    )
-
-    resp = await client.get("/api/llm/providers", headers=HEADERS)
-    assert REAL_KEY not in resp.text
-    assert resp.json()[0]["config"]["api_key"] == REDACTED

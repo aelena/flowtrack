@@ -110,16 +110,6 @@ class ProjectFile(Base):
     project = relationship("Project", back_populates="files")
 
 
-class LLMProvider(Base):
-    __tablename__ = "llm_providers"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
-    provider_type = Column(String(100), nullable=False)
-    config = Column(JSONB, default=dict)
-    created_at = Column(DateTime(timezone=True), default=_utcnow)
-
-
 class Snippet(Base):
     __tablename__ = "snippets"
 

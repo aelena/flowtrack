@@ -13,30 +13,6 @@ router = APIRouter(prefix="/api/config", tags=["config"], dependencies=[Depends(
 CONFIG_PATH = os.path.join(settings.storage_path, "flowtrack.yaml")
 
 DEFAULT_CONFIG = {
-    "llm_providers": [
-        {
-            "name": "OpenAI",
-            "type": "openai",
-            "api_key": "",
-            "base_url": "https://api.openai.com/v1",
-            "model": "gpt-4o",
-            "enabled": False,
-        },
-        {
-            "name": "Anthropic",
-            "type": "anthropic",
-            "api_key": "",
-            "model": "claude-sonnet-4-20250514",
-            "enabled": False,
-        },
-        {
-            "name": "Ollama (local)",
-            "type": "ollama",
-            "base_url": "http://localhost:11434",
-            "model": "llama3",
-            "enabled": False,
-        },
-    ],
     "ides": [
         {
             "name": "Cursor",

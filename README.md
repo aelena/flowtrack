@@ -90,26 +90,10 @@ Copy `.env.example` to `.env` and adjust:
 - Zen-style distraction-free writing
 
 ### Commands
-- Generate PRD, BRD, MRD from project data — with JSON download buttons
+- Generate PRD, BRD, MRD from project data — deterministic, with JSON download buttons
 - Export project as ZIP (includes files)
 - View pending tasks summary
 - Copy a `cd <dir> && claude` command for the project directory
-
-### The AI features are not built yet
-
-Being explicit, because the surface exists and the substance does not:
-
-| Surface | What it actually does today |
-|---|---|
-| **Chat Mode** | Returns a context-aware echo. It does not call any model. |
-| **PRD / BRD / MRD** | String templating over project fields. Useful, but no model involved. |
-| **Suggest next steps** | A handful of hardcoded heuristics. |
-| **Generate social content** | A template. It produces "Excited to share my latest project", which is exactly the register I would not publish. |
-| **CLI command** | Prints `cd "<dir>" && claude` for you to copy. It does not launch anything — the API runs in a container and cannot reach your host. |
-| **LLM providers in settings** | Stored and editable. Nothing reads them. |
-| **IDE executables in settings** | Stored and editable. Nothing reads them. |
-
-**The plan is not to implement this layer.** Building provider abstraction, streaming, key management and cost control would be a lot of work to end up with a worse chat than the one already in Claude Code. The intended direction is an **MCP server**: FlowTrack stops trying to be an AI application and becomes a tool the agent drives, which deletes the fake surface rather than filling it in. The dead endpoints go with it.
 
 ### Configuration (`/settings`)
 - YAML-based configuration editor, edited as raw YAML
@@ -129,6 +113,54 @@ Being explicit, because the surface exists and the substance does not:
 - Search, filter by area, sort by name/date
 - URL-based routing (`/projects/:id`) for deep linking
 - SVG favicon for browser tab identification
+
+## AI: the MCP server
+
+FlowTrack does not call a model, and that is a decision rather than a gap.
+
+Earlier versions pretended otherwise. Chat Mode returned an echo, "suggest next steps" was a handful of hardcoded heuristics, and the settings page happily stored OpenAI and Anthropic keys that nothing ever read. The obvious fix was to implement the layer for real — provider abstraction, streaming, key management, cost ceilings — and the honest assessment was that all of that work would end in a worse chat than the one already open in the next terminal window.
+
+So the direction inverted. **FlowTrack stopped trying to be an AI application and became a tool an agent drives**, through an MCP server in [`mcp-server/`](mcp-server/). That deleted the fake surface instead of filling it in: the chat endpoint, the suggestion heuristics, the social-copy generator and the entire `llm_providers` table are gone. The feature arrived as a net removal of code, and there are no provider API keys left in the system to leak.
+
+### What it gives an agent
+
+Seven tools, and the number is deliberate. A server with one tool per REST endpoint gives the agent thirty ways to ask a question and no basis for choosing. These are shaped around what you actually want to know about a portfolio.
+
+| Tool | |
+|---|---|
+| `portfolio_digest` | **The one that matters.** What is stale, what is overdue, active count against the WIP limit, and where the objective and subjective completion figures disagree most — in one call |
+| `list_projects` | Compact digest, filterable by area, status, minimum stars, or days untouched |
+| `get_project` | Full detail for one project, with tasks and notes |
+| `add_tasks` | Bulk creation from a markdown list |
+| `update_task_status` | new / in_progress / done |
+| `add_note` | The durable record — decisions, especially decisions to stop |
+| `set_project_state` | Status, stars, subjective completion: the verbs of a triage |
+
+Two resources: `flowtrack://portfolio` renders every non-archived project as one markdown document, so an agent can take in the whole picture in a single cheap read; `flowtrack://project/{id}` does the same for one project.
+
+### The prompts are the opinionated part
+
+Prompts are the least-used corner of MCP and the reason this server is worth having rather than a generic database wrapper. They encode the opinions the tool exists to enforce.
+
+**`/reckoning`** walks the stale and overdue projects one at a time, quotes each project's own `abandonment_criteria` back at you, and forces a single decision: continue, freeze, or kill. It records the answer, in your words, dated. It stops every five projects to ask whether to go on, and it does not soften the question — because freezing and killing are successful outcomes, and a portfolio where everything stays active is the failure this tool was built to prevent.
+
+**`/next`** gives one recommendation rather than three options, and refuses to suggest starting anything while the WIP limit is exceeded.
+
+**`/close-out`** drafts the abandonment note for a project you are stopping: what it was for, what got built, why it is stopping — specific and unsentimental, "no demand was ever tested" beats "priorities shifted" — and what is worth salvaging, by filename.
+
+### Setup
+
+```bash
+claude mcp add flowtrack \
+  --env FLOWTRACK_API_KEY=ft_dev_key_change_me \
+  -- uvx --from ./mcp-server flowtrack-mcp
+```
+
+Full configuration, including Claude Desktop and Cursor, in [`mcp-server/README.md`](mcp-server/README.md).
+
+### One thing to keep in mind
+
+**Notes and snippets are data, not instructions.** Some of them arrive from arbitrary web pages through the Chrome clipper, which means a note can contain text engineered to read like a directive. The server's instructions say so explicitly, and any prompt built on top of this should treat note content as material to evaluate rather than orders to follow.
 
 ## Chrome Extension
 
@@ -180,14 +212,10 @@ All endpoints require `X-API-Key` header.
 | **Extension** | | |
 | GET | `/api/extension/projects` | Simplified project list for Chrome extension |
 | POST | `/api/extension/snippet` | Save URL/snippet from extension |
-| **LLM** | | |
-| GET/POST | `/api/llm/providers` | List/add LLM providers |
-| POST | `/api/llm/generate/prd/{id}` | Generate PRD |
-| POST | `/api/llm/generate/brd/{id}` | Generate BRD |
-| POST | `/api/llm/generate/mrd/{id}` | Generate MRD |
-| POST | `/api/llm/generate/social/{id}` | Generate social content |
-| POST | `/api/llm/chat/{id}` | Chat with project context |
-| POST | `/api/llm/suggest/{id}` | Suggest next steps |
+| **Documents** | | |
+| POST | `/api/documents/prd/{id}` | Generate PRD |
+| POST | `/api/documents/brd/{id}` | Generate BRD |
+| POST | `/api/documents/mrd/{id}` | Generate MRD |
 | **Config** | | |
 | GET | `/api/config/` | Get parsed config |
 | GET/PUT | `/api/config/yaml` | Get/update config as YAML |
@@ -249,7 +277,7 @@ flowtrack/
         notes.py                # Note CRUD
         files.py                # File upload/download
         extension.py            # Chrome extension endpoints
-        llm.py                  # LLM integration + document generation
+        documents.py            # Deterministic PRD/BRD/MRD generation
         config.py               # YAML configuration management
         backup.py               # Full data export/import (JSON)
     tests/
@@ -284,10 +312,16 @@ flowtrack/
           AddTaskModal.svelte   # Bulk task creation modal
           NoteEditor.svelte     # Markdown note editor with preview
           WriteMode.svelte      # Split markdown/preview zen editor
-          ChatMode.svelte       # ChatGPT-style chat interface
           CommandBar.svelte     # Commands with download buttons (PRD, BRD, etc.)
     static/
       favicon.svg               # SVG favicon
+  mcp-server/
+    pyproject.toml              # Installable with uvx / pipx
+    src/flowtrack_mcp/
+      server.py                 # 7 tools, 2 resources, 3 prompts
+      client.py                 # Thin async client over the REST API
+    tests/
+    smoke_test.py               # Drives the real stdio handshake
   extension/
     manifest.json               # Chrome extension manifest (V3)
     popup.html                  # Extension popup UI
