@@ -48,6 +48,9 @@ export const language = persisted('language', 'en');
 export const font = persisted('font', 'Segoe UI');
 export const sidebarOpen = persisted('sidebarOpen', true);
 export const apiKey = persisted('apiKey', 'ft_dev_key_change_me');
+// The host-side launcher. Empty disables the feature entirely, and the note
+// buttons fall back to putting the command on the clipboard.
+export const launcherUrl = persisted('launcherUrl', 'http://localhost:7030');
 
 export const toasts = writable([]);
 

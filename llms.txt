@@ -41,6 +41,12 @@ FlowTrack does not call a model. It exposes itself to an agent instead, which is
 - [mcp-server/src/flowtrack_mcp/server.py](mcp-server/src/flowtrack_mcp/server.py): Seven tools shaped around portfolio questions rather than REST endpoints, two markdown resources, and three prompts — `reckoning`, `next`, `close-out` — which is where the opinions live.
 - [mcp-server/src/flowtrack_mcp/client.py](mcp-server/src/flowtrack_mcp/client.py): Thin async client over the REST API.
 
+## Session launcher
+
+- [launcher/README](launcher/README.md): Why a host-side process is needed at all, how to run it, and the security model.
+- [launcher/flowtrack_launcher.py](launcher/flowtrack_launcher.py): Loopback HTTP server that opens a terminal in a project directory. It never executes anything the browser sends — the request names an intent and the launcher composes the command from its own configuration.
+- [frontend/src/lib/launcher.js](frontend/src/lib/launcher.js): Client, with a clipboard fallback for when no launcher is running.
+
 ## Optional
 
 - [Chrome extension](extension/): Clips URLs and text selections into a project. Needs the declared `host_permissions` to reach the API at all.
