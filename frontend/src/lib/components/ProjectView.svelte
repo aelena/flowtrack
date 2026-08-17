@@ -12,7 +12,6 @@
   import TaskList from './TaskList.svelte';
   import NoteEditor from './NoteEditor.svelte';
   import WriteMode from './WriteMode.svelte';
-  import ChatMode from './ChatMode.svelte';
   import CommandBar from './CommandBar.svelte';
 
   export let projectId;
@@ -424,8 +423,6 @@
           bind:content={writeContent}
           onSave={(c) => updateProject(projectId, { description: c })}
         />
-      {:else if mode === 'chat'}
-        <ChatMode {projectId} />
       {/if}
     </div>
 

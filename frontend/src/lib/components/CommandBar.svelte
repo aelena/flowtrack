@@ -1,14 +1,6 @@
 <script>
   import { language } from '../stores.js';
-  import {
-    generatePRD,
-    generateBRD,
-    generateMRD,
-    generateSocial,
-    suggestNextSteps,
-    exportProject,
-    getPending,
-  } from '../api.js';
+  import { generatePRD, generateBRD, generateMRD, exportProject, getPending } from '../api.js';
   import { t } from '../i18n.js';
   import { tsFilename } from '../utils.js';
 
@@ -54,14 +46,6 @@
           outputTitle = 'MRD';
           canDownload = true;
           downloadFilename = tsFilename(projectName + '-MRD', 'json');
-          break;
-        case 'social':
-          result = await generateSocial(projectId);
-          outputTitle = 'Social Content';
-          break;
-        case 'suggest':
-          result = await suggestNextSteps(projectId);
-          outputTitle = 'Suggestions';
           break;
         case 'pending':
           result = await getPending(projectId);
@@ -132,37 +116,11 @@
           >
           MRD
         </button>
-        <button on:click={() => run('social')}>
-          <svg viewBox="0 0 16 16" class="cmd-icon"
-            ><circle
-              cx="8"
-              cy="8"
-              r="6"
-              stroke="currentColor"
-              fill="none"
-              stroke-width="1.2"
-            /><path d="M5 6h6M5 8h4M5 10h5" stroke="currentColor" stroke-width="0.8" /></svg
-          >
-          Social
-        </button>
       </div>
     </div>
     <div class="command-group">
       <span class="group-label">Actions</span>
       <div class="command-row">
-        <button on:click={() => run('suggest')}>
-          <svg viewBox="0 0 16 16" class="cmd-icon"
-            ><circle
-              cx="8"
-              cy="6"
-              r="4"
-              stroke="currentColor"
-              fill="none"
-              stroke-width="1.2"
-            /><path d="M6 10v3h4v-3" stroke="currentColor" fill="none" stroke-width="1.2" /></svg
-          >
-          Suggest
-        </button>
         <button on:click={() => run('pending')}>
           <svg viewBox="0 0 16 16" class="cmd-icon"
             ><rect

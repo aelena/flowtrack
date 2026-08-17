@@ -1,3 +1,11 @@
+"""Deterministic document generation from project data.
+
+No model is involved and none is planned: an agent driving the MCP server
+has the whole project in context and can write something better than a
+template ever would. These endpoints exist because a downloadable,
+reproducible PRD/BRD/MRD is genuinely useful on its own.
+"""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,11 +15,9 @@ from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import LLMProvider, Project
-from ..redaction import redact_secrets
-from ..schemas import ChatMessage, LLMProviderCreate, LLMProviderOut
+from ..models import Project
 
-router = APIRouter(prefix="/api/llm", tags=["llm"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(prefix="/api/documents", tags=["documents"], dependencies=[Depends(verify_api_key)])
 
 
 async def _get_project_context(project_id: UUID, db: AsyncSession) -> dict:
@@ -35,34 +41,7 @@ async def _get_project_context(project_id: UUID, db: AsyncSession) -> dict:
     }
 
 
-@router.get("/providers", response_model=list[LLMProviderOut])
-async def list_providers(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(LLMProvider).order_by(LLMProvider.name))
-    providers = result.scalars().all()
-    # A provider's config holds its API key. Returning it verbatim handed the
-    # key to anything that could reach the endpoint.
-    return [
-        LLMProviderOut(
-            id=p.id,
-            name=p.name,
-            provider_type=p.provider_type,
-            config=redact_secrets(p.config or {}),
-            created_at=p.created_at,
-        )
-        for p in providers
-    ]
-
-
-@router.post("/providers", response_model=LLMProviderOut, status_code=201)
-async def add_provider(data: LLMProviderCreate, db: AsyncSession = Depends(get_db)):
-    provider = LLMProvider(**data.model_dump())
-    db.add(provider)
-    await db.commit()
-    await db.refresh(provider)
-    return provider
-
-
-@router.post("/generate/prd/{project_id}")
+@router.post("/prd/{project_id}")
 async def generate_prd(project_id: UUID, db: AsyncSession = Depends(get_db)):
     ctx = await _get_project_context(project_id, db)
     prd = {
@@ -83,7 +62,7 @@ async def generate_prd(project_id: UUID, db: AsyncSession = Depends(get_db)):
     return prd
 
 
-@router.post("/generate/brd/{project_id}")
+@router.post("/brd/{project_id}")
 async def generate_brd(project_id: UUID, db: AsyncSession = Depends(get_db)):
     ctx = await _get_project_context(project_id, db)
     brd = {
@@ -96,7 +75,7 @@ async def generate_brd(project_id: UUID, db: AsyncSession = Depends(get_db)):
     return brd
 
 
-@router.post("/generate/mrd/{project_id}")
+@router.post("/mrd/{project_id}")
 async def generate_mrd(project_id: UUID, db: AsyncSession = Depends(get_db)):
     ctx = await _get_project_context(project_id, db)
     mrd = {
@@ -107,43 +86,3 @@ async def generate_mrd(project_id: UUID, db: AsyncSession = Depends(get_db)):
         "key_features": [t["title"] for t in ctx["tasks"]],
     }
     return mrd
-
-
-@router.post("/generate/social/{project_id}")
-async def generate_social(project_id: UUID, db: AsyncSession = Depends(get_db)):
-    ctx = await _get_project_context(project_id, db)
-    name = ctx["final_name"] or ctx["name"]
-    desc = ctx["description"] or ctx["vision"] or ""
-    return {
-        "linkedin": f"Excited to share my latest project: {name}. {desc[:200]}",
-        "twitter": f"{name} - {desc[:220]}" if len(desc) > 0 else f"Working on {name}!",
-    }
-
-
-@router.post("/chat/{project_id}")
-async def chat(project_id: UUID, msg: ChatMessage, db: AsyncSession = Depends(get_db)):
-    ctx = await _get_project_context(project_id, db)
-    # Placeholder: returns context-aware echo. Real implementation would call configured LLM.
-    return {
-        "response": f"[LLM placeholder] Regarding '{ctx['name']}': {msg.message}\n\nProject context loaded with {len(ctx['tasks'])} tasks and {len(ctx['notes'])} notes.",
-        "project_context": ctx["name"],
-    }
-
-
-@router.post("/suggest/{project_id}")
-async def suggest(project_id: UUID, db: AsyncSession = Depends(get_db)):
-    ctx = await _get_project_context(project_id, db)
-    pending = [t for t in ctx["tasks"] if t["status"] != "done"]
-    in_progress = [t for t in ctx["tasks"] if t["status"] == "in_progress"]
-    suggestions = []
-    if in_progress:
-        suggestions.append(f"Continue working on: {in_progress[0]['title']}")
-    if pending:
-        suggestions.append(f"Next up: {pending[0]['title']}")
-    if not ctx["description"]:
-        suggestions.append("Add a project description to clarify scope")
-    if not ctx["completion_criteria"]:
-        suggestions.append("Define completion criteria to know when you're done")
-    if not suggestions:
-        suggestions.append("All tasks done! Consider reviewing and archiving this project.")
-    return {"suggestions": suggestions}

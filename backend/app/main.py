@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import areas, backup, config, extension, files, llm, notes, projects, tasks
+from .routers import areas, backup, config, documents, extension, files, notes, projects, tasks
 
 logger = logging.getLogger("flowtrack")
 
@@ -103,7 +103,7 @@ app.include_router(tasks.router)
 app.include_router(notes.router)
 app.include_router(files.router)
 app.include_router(extension.router)
-app.include_router(llm.router)
+app.include_router(documents.router)
 app.include_router(config.router)
 app.include_router(backup.router)
 
