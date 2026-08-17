@@ -112,12 +112,9 @@ export const deleteFile = (projectId, fileId) =>
   request('DELETE', `/api/projects/${projectId}/files/${fileId}`);
 
 // LLM
-export const generatePRD = (id) => request('POST', `/api/llm/generate/prd/${id}`);
-export const generateBRD = (id) => request('POST', `/api/llm/generate/brd/${id}`);
-export const generateMRD = (id) => request('POST', `/api/llm/generate/mrd/${id}`);
-export const generateSocial = (id) => request('POST', `/api/llm/generate/social/${id}`);
-export const chatWithProject = (id, message) => request('POST', `/api/llm/chat/${id}`, { message });
-export const suggestNextSteps = (id) => request('POST', `/api/llm/suggest/${id}`);
+export const generatePRD = (id) => request('POST', `/api/documents/prd/${id}`);
+export const generateBRD = (id) => request('POST', `/api/documents/brd/${id}`);
+export const generateMRD = (id) => request('POST', `/api/documents/mrd/${id}`);
 
 // Config
 export const getConfigYaml = () => request('GET', '/api/config/yaml');

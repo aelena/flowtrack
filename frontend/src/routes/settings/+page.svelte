@@ -216,27 +216,7 @@
 
   <div class="settings-section">
     <h2>YAML Reference</h2>
-    <pre class="reference">{`llm_providers:
-  - name: OpenAI
-    type: openai
-    api_key: sk-...
-    base_url: https://api.openai.com/v1
-    model: gpt-4o
-    enabled: true
-
-  - name: Anthropic
-    type: anthropic
-    api_key: sk-ant-...
-    model: claude-sonnet-4-20250514
-    enabled: true
-
-  - name: Ollama (local)
-    type: ollama
-    base_url: http://localhost:11434
-    model: llama3
-    enabled: true
-
-ides:
+    <pre class="reference">{`ides:
   - name: Cursor
     command: C:/Users/you/AppData/Local/Programs/cursor/Cursor.exe
     args: ["{project_dir}"]
