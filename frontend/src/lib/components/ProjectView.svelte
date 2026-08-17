@@ -411,7 +411,7 @@
           {/if}
 
           <TaskList {projectId} />
-          <NoteEditor {projectId} />
+          <NoteEditor {projectId} localDir={project.local_dir} />
           <CommandBar
             {projectId}
             localDir={project.local_dir || ''}

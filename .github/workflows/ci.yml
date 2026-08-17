@@ -118,6 +118,34 @@ jobs:
       - name: Tests
         run: pytest -q
 
+  launcher:
+    name: Launcher — ruff and pytest
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: launcher
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test tooling
+        # The launcher itself has no dependencies beyond the standard library.
+        run: pip install pytest ruff
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Tests
+        run: pytest -q
+
   compose:
     name: Stack — build and reach healthy
     runs-on: ubuntu-latest
