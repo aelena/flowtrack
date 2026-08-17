@@ -1,8 +1,9 @@
 import os
+import re
 import uuid as uuid_mod
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,25 @@ from ..dependencies import verify_api_key
 from ..models import ProjectFile
 from ..schemas import FileOut
 
-router = APIRouter(prefix="/api/projects/{project_id}/files", tags=["files"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/files", tags=["files"], dependencies=[Depends(verify_api_key)]
+)
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+CHUNK_SIZE = 1024 * 1024  # read uploads a MiB at a time
+
+
+def _sanitize_folder(folder: str | None) -> str | None:
+    if not folder:
+        return None
+    folder = folder.replace("\\", "/")
+    parts = [p for p in folder.split("/") if p and p != "." and p != ".."]
+    if not parts:
+        return None
+    sanitized = "/".join(parts)
+    if re.search(r"[<>:\"|?*\x00-\x1f]", sanitized):
+        raise HTTPException(400, "Folder name contains invalid characters")
+    return sanitized
 
 
 @router.get("/", response_model=list[FileOut])
@@ -31,32 +50,57 @@ async def upload_file(
     folder: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    # Determine file type from extension
     ext = os.path.splitext(file.filename)[1].lstrip(".").lower() if file.filename else "bin"
 
-    # Create storage directory
+    safe_folder = _sanitize_folder(folder)
+
     store_dir = os.path.join(settings.storage_path, str(project_id))
-    if folder:
-        store_dir = os.path.join(store_dir, folder)
+    if safe_folder:
+        store_dir = os.path.join(store_dir, safe_folder)
+
+    resolved = os.path.realpath(store_dir)
+    storage_root = os.path.realpath(settings.storage_path)
+    if not resolved.startswith(storage_root + os.sep) and resolved != storage_root:
+        raise HTTPException(400, "Invalid folder path")
+
     os.makedirs(store_dir, exist_ok=True)
 
-    # Save file with unique name
-    unique_name = f"{uuid_mod.uuid4().hex}_{file.filename}"
+    # basename() so a crafted filename such as "../../evil" cannot climb out of
+    # the project directory once it is joined onto store_dir.
+    original_name = os.path.basename(file.filename or "upload.bin")
+    unique_name = f"{uuid_mod.uuid4().hex}_{original_name}"
     full_path = os.path.join(store_dir, unique_name)
 
-    content = await file.read()
-    with open(full_path, "wb") as f:
-        f.write(content)
+    # Stream to disk in chunks and stop as soon as the limit is passed. Reading
+    # the whole upload into memory first meant a large file exhausted the
+    # container before the size check ever ran.
+    total = 0
+    too_large = False
+    with open(full_path, "wb") as out:
+        while True:
+            chunk = await file.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_UPLOAD_SIZE:
+                too_large = True
+                break
+            out.write(chunk)
+
+    if too_large:
+        if os.path.exists(full_path):
+            os.remove(full_path)
+        raise HTTPException(413, f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB")
 
     # Relative path for DB
     rel_path = os.path.relpath(full_path, settings.storage_path)
 
     pf = ProjectFile(
         project_id=project_id,
-        filename=file.filename,
+        filename=original_name,
         file_type=ext,
         file_path=rel_path,
-        folder=folder,
+        folder=safe_folder,
     )
     db.add(pf)
     await db.commit()
@@ -69,7 +113,10 @@ async def download_file(project_id: UUID, file_id: UUID, db: AsyncSession = Depe
     pf = await db.get(ProjectFile, file_id)
     if not pf or pf.project_id != project_id:
         raise HTTPException(404, "File not found")
-    full_path = os.path.join(settings.storage_path, pf.file_path)
+    full_path = os.path.realpath(os.path.join(settings.storage_path, pf.file_path))
+    storage_root = os.path.realpath(settings.storage_path)
+    if not full_path.startswith(storage_root + os.sep):
+        raise HTTPException(403, "Access denied")
     if not os.path.exists(full_path):
         raise HTTPException(404, "File missing from storage")
     return FileResponse(full_path, filename=pf.filename)

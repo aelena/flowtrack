@@ -1,41 +1,51 @@
 <script>
-  import { language } from '../stores.js';
+  import { language, showToast } from '../stores.js';
   import { listTasks, updateTask, deleteTask } from '../api.js';
   import { t } from '../i18n.js';
+  import AddTaskModal from './AddTaskModal.svelte';
 
   export let projectId;
 
   let tasks = [];
-  let lang = 'en';
   let showAddModal = false;
-
-  language.subscribe(v => lang = v);
 
   async function load() {
     if (!projectId) return;
-    tasks = await listTasks(projectId);
+    try {
+      tasks = await listTasks(projectId);
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function cycleStatus(task) {
     const next = { new: 'in_progress', in_progress: 'done', done: 'new' };
-    await updateTask(projectId, task.id, { status: next[task.status] });
-    await load();
+    try {
+      await updateTask(projectId, task.id, { status: next[task.status] });
+      await load();
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   async function removeTask(taskId) {
-    await deleteTask(projectId, taskId);
-    await load();
+    try {
+      await deleteTask(projectId, taskId);
+      await load();
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
-  $: load(), projectId;
-
-  import AddTaskModal from './AddTaskModal.svelte';
+  $: (load(), projectId);
 </script>
 
 <div class="task-list">
   <div class="task-header">
-    <h3>{t('tasks', lang)}</h3>
-    <button class="primary small" on:click={() => showAddModal = true}>+ {t('newTask', lang)}</button>
+    <h3>{t('tasks', $language)}</h3>
+    <button class="primary small" on:click={() => (showAddModal = true)}
+      >+ {t('newTask', $language)}</button
+    >
   </div>
 
   {#if tasks.length === 0}
@@ -44,7 +54,11 @@
     {#each tasks as task}
       <div class="task-item">
         <button class="status-btn badge {task.status}" on:click={() => cycleStatus(task)}>
-          {task.status === 'new' ? t('pending', lang) : task.status === 'in_progress' ? t('inProgress', lang) : t('done', lang)}
+          {task.status === 'new'
+            ? t('pending', $language)
+            : task.status === 'in_progress'
+              ? t('inProgress', $language)
+              : t('done', $language)}
         </button>
         <span class="task-title" class:done={task.status === 'done'}>{task.title}</span>
         <button class="icon-btn danger" on:click={() => removeTask(task.id)}>&#10005;</button>
@@ -54,7 +68,13 @@
 </div>
 
 {#if showAddModal}
-  <AddTaskModal {projectId} on:close={() => { showAddModal = false; load(); }} />
+  <AddTaskModal
+    {projectId}
+    on:close={() => {
+      showAddModal = false;
+      load();
+    }}
+  />
 {/if}
 
 <style>

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..dependencies import verify_api_key
 from ..models import Note
-from ..schemas import NoteCreate, NoteUpdate, NoteOut
+from ..schemas import NoteCreate, NoteOut, NoteUpdate
 
 router = APIRouter(prefix="/api/notes", tags=["notes"], dependencies=[Depends(verify_api_key)])
 

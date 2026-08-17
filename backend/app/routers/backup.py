@@ -1,14 +1,14 @@
-from datetime import datetime, date
+from datetime import UTC, date, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Area, Project, Task, Note, Snippet, TaskStatus, ProjectStatus
+from ..models import Area, Note, Project, ProjectStatus, Snippet, Task, TaskStatus
 
 router = APIRouter(prefix="/api/backup", tags=["backup"], dependencies=[Depends(verify_api_key)])
 
@@ -118,7 +118,7 @@ async def export_all(db: AsyncSession = Depends(get_db)):
 
     return {
         "version": "1.0",
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "areas": areas,
         "projects": projects,
         "snippets": snippets,
@@ -133,7 +133,9 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
     new records are inserted.
     """
     imported = {"areas": 0, "projects": 0, "tasks": 0, "notes": 0, "snippets": 0}
-    errors = []
+    # Records whose id already exists are left untouched. Count them so the
+    # caller can tell "nothing to do" apart from "nothing happened".
+    skipped = {"areas": 0, "projects": 0, "tasks": 0, "notes": 0, "snippets": 0}
 
     try:
         # Import areas first
@@ -142,6 +144,7 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
             if area_id:
                 existing = await db.get(Area, area_id)
                 if existing:
+                    skipped["areas"] += 1
                     continue
             area = Area(name=a_data["name"])
             if area_id:
@@ -160,6 +163,9 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
             if project_id:
                 existing = await db.get(Project, project_id)
                 if existing:
+                    skipped["projects"] += 1
+                    skipped["tasks"] += len(p_data.get("tasks", []))
+                    skipped["notes"] += len(p_data.get("notes", []))
                     continue
 
             status_val = p_data.get("status", "active")
@@ -207,6 +213,7 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
                 if task_id:
                     existing_task = await db.get(Task, task_id)
                     if existing_task:
+                        skipped["tasks"] += 1
                         continue
 
                 status_str = t_data.get("status", "new")
@@ -238,6 +245,7 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
                 if note_id:
                     existing_note = await db.get(Note, note_id)
                     if existing_note:
+                        skipped["notes"] += 1
                         continue
 
                 note = Note(
@@ -267,6 +275,7 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
             if snippet_id:
                 existing_snippet = await db.get(Snippet, snippet_id)
                 if existing_snippet:
+                    skipped["snippets"] += 1
                     continue
 
             snippet = Snippet(
@@ -285,8 +294,13 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
 
         await db.commit()
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
+        # `from None`: the internal error is deliberately not surfaced to the
+        # client, only logged by the generic handler.
+        raise HTTPException(
+            status_code=400,
+            detail="Import failed: the uploaded data contains invalid or conflicting records",
+        ) from None
 
-    return {"status": "ok", "imported": imported}
+    return {"status": "ok", "imported": imported, "skipped": skipped}

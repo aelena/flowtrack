@@ -1,4 +1,5 @@
 import pytest
+
 from .conftest import HEADERS
 
 
@@ -33,7 +34,9 @@ async def test_update_project(client):
     resp = await client.post("/api/projects/", json={"work_name": "V1"}, headers=HEADERS)
     pid = resp.json()["id"]
 
-    resp = await client.put(f"/api/projects/{pid}", json={"work_name": "V2", "star_rating": 5}, headers=HEADERS)
+    resp = await client.put(
+        f"/api/projects/{pid}", json={"work_name": "V2", "star_rating": 5}, headers=HEADERS
+    )
     assert resp.status_code == 200
     assert resp.json()["work_name"] == "V2"
 
@@ -45,6 +48,32 @@ async def test_archive_project(client):
 
     resp = await client.post(f"/api/projects/{pid}/archive", headers=HEADERS)
     assert resp.json()["archived"] is True
+
+
+@pytest.mark.asyncio
+async def test_unarchive_project(client):
+    resp = await client.post("/api/projects/", json={"work_name": "Round Trip"}, headers=HEADERS)
+    pid = resp.json()["id"]
+
+    resp = await client.post(f"/api/projects/{pid}/archive", headers=HEADERS)
+    assert resp.json()["archived"] is True
+
+    resp = await client.post(f"/api/projects/{pid}/unarchive", headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["archived"] is False
+
+    # And it shows up again in the default (non-archived) listing.
+    resp = await client.get("/api/projects/", headers=HEADERS)
+    assert any(p["id"] == pid for p in resp.json())
+
+
+@pytest.mark.asyncio
+async def test_invalid_status_is_rejected_with_422(client):
+    resp = await client.post("/api/projects/", json={"work_name": "Bad Status"}, headers=HEADERS)
+    pid = resp.json()["id"]
+
+    resp = await client.put(f"/api/projects/{pid}", json={"status": "bogus"}, headers=HEADERS)
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -79,6 +108,6 @@ async def test_export_project(client):
     resp = await client.post("/api/projects/", json={"work_name": "Export Me"}, headers=HEADERS)
     pid = resp.json()["id"]
 
-    resp = await client.post(f"/api/projects/{pid}/export", headers=HEADERS)
+    resp = await client.get(f"/api/projects/{pid}/export", headers=HEADERS)
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"

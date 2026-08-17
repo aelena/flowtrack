@@ -1,4 +1,5 @@
 import pytest
+
 from .conftest import HEADERS
 
 
@@ -7,7 +8,9 @@ async def test_create_single_task(client):
     resp = await client.post("/api/projects/", json={"work_name": "Task Project"}, headers=HEADERS)
     pid = resp.json()["id"]
 
-    resp = await client.post(f"/api/projects/{pid}/tasks/", json={"content": "Build the thing"}, headers=HEADERS)
+    resp = await client.post(
+        f"/api/projects/{pid}/tasks/", json={"content": "Build the thing"}, headers=HEADERS
+    )
     assert resp.status_code == 201
     tasks = resp.json()
     assert len(tasks) == 1
@@ -48,7 +51,9 @@ async def test_update_task_status(client):
     resp = await client.post(f"/api/projects/{pid}/tasks/", json={"content": "Do it"}, headers=HEADERS)
     tid = resp.json()[0]["id"]
 
-    resp = await client.put(f"/api/projects/{pid}/tasks/{tid}", json={"status": "in_progress"}, headers=HEADERS)
+    resp = await client.put(
+        f"/api/projects/{pid}/tasks/{tid}", json={"status": "in_progress"}, headers=HEADERS
+    )
     assert resp.json()["status"] == "in_progress"
 
     resp = await client.put(f"/api/projects/{pid}/tasks/{tid}", json={"status": "done"}, headers=HEADERS)

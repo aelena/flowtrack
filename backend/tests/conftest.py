@@ -1,23 +1,36 @@
-import asyncio
 import os
+import tempfile
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 os.environ["API_KEY"] = "test_key"
-os.environ["DATABASE_URL"] = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+asyncpg://flowtrack:flowtrack_secret@localhost:7029/flowtrack",
-)
-os.environ["STORAGE_PATH"] = "/tmp/flowtrack_test_storage"
+
+# The setup_db fixture below runs drop_all after every single test. Pointing it
+# at a real database destroys it. Default to a dedicated `_test` database and
+# refuse to start if the target does not look like a throwaway.
+DEFAULT_TEST_DB = "postgresql+asyncpg://flowtrack:flowtrack_secret@localhost:7029/flowtrack_test"
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DB)
+
+_db_name = TEST_DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
+if not _db_name.endswith("_test"):
+    raise RuntimeError(
+        f"Refusing to run: the test suite drops every table, and "
+        f"TEST_DATABASE_URL points at the database {_db_name!r}, whose name does "
+        f"not end in '_test'. Create a throwaway database first, e.g.\n\n"
+        f"    docker compose exec db psql -U flowtrack -d postgres "
+        f"-c 'CREATE DATABASE flowtrack_test;'\n"
+    )
+
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["STORAGE_PATH"] = tempfile.mkdtemp(prefix="flowtrack_test_storage_")
 
 from app.database import Base, get_db
 from app.main import app
 
-test_engine = create_async_engine(os.environ["DATABASE_URL"], echo=False, poolclass=NullPool)
+test_engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
 test_session = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 

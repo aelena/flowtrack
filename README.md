@@ -1,6 +1,6 @@
 # FlowTrack
 
-Personal project tracking tool with a minimalistic, zen-style interface. Combines task management, note-taking, and AI-assisted workflows around the concept of a **Project** — a stateful bag of properties that transitions through a lightweight lifecycle.
+Personal project tracking tool with a minimalistic, zen-style interface. Combines task management, note-taking, and AI-assisted workflows around the concept of a **Project** — a stateful bag of properties that transitions through a lightweight lifecycle. No Gantt BS, no agile artifacts, just my own way of tracking. Will probably not work for you of the box.
 
 ## Architecture
 
@@ -13,8 +13,11 @@ Personal project tracking tool with a minimalistic, zen-style interface. Combine
 ## Quick Start
 
 ```bash
-# 1. Configure
-# Edit .env with your preferred credentials and API key
+git clone https://github.com/aelena/flowtrack.git
+cd flowtrack
+
+# 1. Create your environment file (the defaults work as-is for local use)
+cp .env.example .env
 
 # 2. Build and run
 docker compose up --build
@@ -25,9 +28,13 @@ docker compose up --build
 # Database:  localhost:7029
 ```
 
+`.env` is gitignored. Without it, `docker compose` has no values for
+`POSTGRES_USER` and friends and the database container will not start — so
+step 1 is not optional.
+
 ## Environment Variables
 
-Set these in `.env`:
+Copy `.env.example` to `.env` and adjust:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -37,6 +44,7 @@ Set these in `.env`:
 | `DATABASE_URL` | `postgresql+asyncpg://...@db:5432/flowtrack` | Internal DB connection (container-to-container, port 5432) |
 | `API_KEY` | `ft_dev_key_change_me` | API key for all endpoints (`X-API-Key` header) |
 | `STORAGE_PATH` | `/app/storage` | Persistent file storage path |
+| `CORS_ORIGINS` | `http://localhost:7027` | Comma-separated allowed origins for CORS |
 
 ## Features
 
@@ -115,6 +123,16 @@ Located in `extension/`. Load as an unpacked extension in Chrome:
 4. Click the extension icon, configure API URL (`http://localhost:7028`) and API key
 5. Use the popup or right-click context menu ("Save to FlowTrack") to save URLs and text snippets to projects
 
+The manifest declares `host_permissions` for `localhost` and `127.0.0.1`, which
+is what lets the extension call the API at all — without it every request is
+blocked before it leaves the browser. If you run FlowTrack on another host,
+grant the optional permission for it, and add the extension origin to
+`CORS_ORIGINS`:
+
+```
+CORS_ORIGINS=http://localhost:7027,chrome-extension://<your-extension-id>
+```
+
 ## API Endpoints
 
 All endpoints require `X-API-Key` header.
@@ -163,14 +181,31 @@ All endpoints require `X-API-Key` header.
 
 ## Running Tests
 
+> **The suite drops every table after each test.** It therefore defaults to a
+> separate `flowtrack_test` database and refuses to start if `TEST_DATABASE_URL`
+> points at a database whose name does not end in `_test`.
+
+Create the throwaway database once:
+
 ```bash
-# Ensure PostgreSQL is running on localhost:7029
-cd backend
-pip install -r requirements.txt
-pytest -v
+docker compose exec db psql -U flowtrack -d postgres -c 'CREATE DATABASE flowtrack_test;'
 ```
 
-Tests automatically create and drop tables, cleaning up after themselves.
+Then run the suite inside the API container (no local Python needed):
+
+```bash
+docker compose exec \
+  -e TEST_DATABASE_URL=postgresql+asyncpg://flowtrack:flowtrack_secret@db:5432/flowtrack_test \
+  api python -m pytest -q
+```
+
+Or from the host, against the published database port:
+
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -q          # uses localhost:7029/flowtrack_test by default
+```
 
 ## Project Structure
 
