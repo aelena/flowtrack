@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from ..config import settings
 from ..dependencies import verify_api_key
+from ..redaction import redact_secrets, restore_secrets
 
 router = APIRouter(prefix="/api/config", tags=["config"], dependencies=[Depends(verify_api_key)])
 
@@ -77,12 +78,12 @@ def _write_config(config: dict):
 
 @router.get("/")
 async def get_config():
-    return _read_config()
+    return redact_secrets(_read_config())
 
 
 @router.get("/yaml")
 async def get_config_yaml():
-    config = _read_config()
+    config = redact_secrets(_read_config())
     return {"yaml": yaml.dump(config, default_flow_style=False, sort_keys=False, allow_unicode=True)}
 
 
@@ -100,12 +101,13 @@ async def put_config_yaml(body: dict = Body(...)):
     if not isinstance(config, dict):
         raise HTTPException(422, "YAML must be a mapping at the top level")
 
+    config = restore_secrets(config, _read_config())
     _write_config(config)
-    return {"status": "ok", "config": config}
+    return {"status": "ok", "config": redact_secrets(config)}
 
 
 @router.post("/reset")
 async def reset_config():
     defaults = copy.deepcopy(DEFAULT_CONFIG)
     _write_config(defaults)
-    return defaults
+    return redact_secrets(defaults)

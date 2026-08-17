@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db
 from ..dependencies import verify_api_key
 from ..models import LLMProvider, Project
+from ..redaction import redact_secrets
 from ..schemas import ChatMessage, LLMProviderCreate, LLMProviderOut
 
 router = APIRouter(prefix="/api/llm", tags=["llm"], dependencies=[Depends(verify_api_key)])
@@ -37,7 +38,19 @@ async def _get_project_context(project_id: UUID, db: AsyncSession) -> dict:
 @router.get("/providers", response_model=list[LLMProviderOut])
 async def list_providers(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(LLMProvider).order_by(LLMProvider.name))
-    return result.scalars().all()
+    providers = result.scalars().all()
+    # A provider's config holds its API key. Returning it verbatim handed the
+    # key to anything that could reach the endpoint.
+    return [
+        LLMProviderOut(
+            id=p.id,
+            name=p.name,
+            provider_type=p.provider_type,
+            config=redact_secrets(p.config or {}),
+            created_at=p.created_at,
+        )
+        for p in providers
+    ]
 
 
 @router.post("/providers", response_model=LLMProviderOut, status_code=201)
