@@ -45,4 +45,8 @@ docker-compose.override.yml
 Thumbs.db
 
 .claude/
+
+# Private working documents — not for the public repo
 specs.md
+IMPROVEMENT-PLAN.md
+seed/

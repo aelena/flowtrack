@@ -1,0 +1,29 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+exclude = [".pytest_cache", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "C4",  # comprehensions
+    "SIM", # simplify
+]
+ignore = [
+    "B008",  # FastAPI puts Depends()/File()/Form() in defaults by design
+    "E501",  # long lines are caught by the formatter, not the linter
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests set environment variables before importing the app on purpose.
+"tests/conftest.py" = ["E402"]
+"tests/*" = ["E402"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

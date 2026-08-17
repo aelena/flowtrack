@@ -1,23 +1,19 @@
 <script>
+  import { onDestroy } from 'svelte';
+  import { renderMarkdown } from '../markdown.js';
+
   export let content = '';
   export let onSave = () => {};
 
   let previewHtml = '';
+  let saveTimer = null;
 
-  function renderMarkdown(text) {
-    return text
-      .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-      .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`{3}([\s\S]*?)`{3}/g, '<pre><code>$1</code></pre>')
-      .replace(/`(.+?)`/g, '<code>$1</code>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>');
+  function debouncedSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => onSave(content), 800);
   }
+
+  onDestroy(() => clearTimeout(saveTimer));
 
   $: previewHtml = renderMarkdown(content);
 </script>
@@ -28,7 +24,7 @@
     <textarea
       class="markdown-editor"
       bind:value={content}
-      on:input={() => onSave(content)}
+      on:input={debouncedSave}
       placeholder="Write markdown here..."
     ></textarea>
   </div>
@@ -38,6 +34,8 @@
   <div class="preview-pane">
     <div class="pane-header">Preview</div>
     <div class="preview-content">
+      <!-- previewHtml comes from renderMarkdown(), which escapes its input. -->
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
       {@html previewHtml}
     </div>
   </div>
@@ -51,7 +49,8 @@
     gap: 0;
   }
 
-  .editor-pane, .preview-pane {
+  .editor-pane,
+  .preview-pane {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -97,9 +96,18 @@
     line-height: 1.6;
   }
 
-  .preview-content :global(h2) { font-size: 1.4rem; margin: 0.5rem 0; }
-  .preview-content :global(h3) { font-size: 1.2rem; margin: 0.5rem 0; }
-  .preview-content :global(h4) { font-size: 1.05rem; margin: 0.5rem 0; }
+  .preview-content :global(h2) {
+    font-size: 1.4rem;
+    margin: 0.5rem 0;
+  }
+  .preview-content :global(h3) {
+    font-size: 1.2rem;
+    margin: 0.5rem 0;
+  }
+  .preview-content :global(h4) {
+    font-size: 1.05rem;
+    margin: 0.5rem 0;
+  }
   .preview-content :global(code) {
     background: var(--bg-tertiary);
     padding: 0.1rem 0.3rem;
@@ -121,5 +129,7 @@
     padding-left: 1.5rem;
     margin: 0.5rem 0;
   }
-  .preview-content :global(strong) { font-weight: 600; }
+  .preview-content :global(strong) {
+    font-weight: 600;
+  }
 </style>

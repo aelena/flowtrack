@@ -1,15 +1,21 @@
 import { get } from 'svelte/store';
 import { apiKey } from './stores.js';
 
-const BASE_URL = typeof window !== 'undefined'
-  ? (window.__PUBLIC_API_URL || 'http://localhost:7028')
-  : (process.env.INTERNAL_API_URL || 'http://api:8000');
+const BASE_URL =
+  typeof window !== 'undefined'
+    ? window.__PUBLIC_API_URL || 'http://localhost:7028'
+    : process.env.INTERNAL_API_URL || 'http://api:8000';
 
 function headers() {
   return {
     'Content-Type': 'application/json',
     'X-API-Key': get(apiKey),
   };
+}
+
+function extractDetail(body, fallback) {
+  if (body && typeof body === 'object' && body.detail) return body.detail;
+  return fallback;
 }
 
 async function request(method, path, body = null) {
@@ -20,11 +26,16 @@ async function request(method, path, body = null) {
   const resp = await fetch(`${BASE_URL}${path}`, opts);
   if (resp.status === 204) return null;
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new Error(err.detail || 'Request failed');
+    const err = await resp.json().catch(() => null);
+    throw new Error(extractDetail(err, resp.statusText));
   }
   const contentType = resp.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) return resp.json();
+  if (
+    contentType.includes('application/json') ||
+    contentType.includes('application/problem+json')
+  ) {
+    return resp.json();
+  }
   return resp;
 }
 
@@ -44,15 +55,23 @@ export const getProject = (id) => request('GET', `/api/projects/${id}`);
 export const createProject = (data) => request('POST', '/api/projects/', data);
 export const updateProject = (id, data) => request('PUT', `/api/projects/${id}`, data);
 export const archiveProject = (id) => request('POST', `/api/projects/${id}/archive`);
+export const unarchiveProject = (id) => request('POST', `/api/projects/${id}/unarchive`);
+export const setProjectArchived = (id, archived) =>
+  archived ? archiveProject(id) : unarchiveProject(id);
 export const exportProject = async (id) => {
   const resp = await fetch(`${BASE_URL}/api/projects/${id}/export`, {
-    method: 'POST',
+    method: 'GET',
     headers: { 'X-API-Key': get(apiKey) },
   });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+    throw new Error(err.detail || 'Export failed');
+  }
   return resp.blob();
 };
 export const getPending = (id) => request('GET', `/api/projects/${id}/pending`);
-export const addCollaborator = (id, collab) => request('POST', `/api/projects/${id}/collaborators`, collab);
+export const addCollaborator = (id, collab) =>
+  request('POST', `/api/projects/${id}/collaborators`, collab);
 
 // Tasks
 export const listTasks = (projectId) => request('GET', `/api/projects/${projectId}/tasks/`);
@@ -83,6 +102,10 @@ export const uploadFile = async (projectId, file, folder = null) => {
     headers: { 'X-API-Key': get(apiKey) },
     body: formData,
   });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => null);
+    throw new Error(extractDetail(err, 'File upload failed'));
+  }
   return resp.json();
 };
 export const deleteFile = (projectId, fileId) =>

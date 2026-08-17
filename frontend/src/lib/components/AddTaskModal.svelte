@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { createTasks } from '../api.js';
+  import { showToast } from '../stores.js';
 
   export let projectId;
 
@@ -10,8 +11,12 @@
 
   async function handleSubmit() {
     if (!content.trim()) return;
-    await createTasks(projectId, content, description || null);
-    dispatch('close');
+    try {
+      await createTasks(projectId, content, description || null);
+      dispatch('close');
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   function handleKeydown(e) {
@@ -21,10 +26,12 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="modal-overlay" on:click|self={() => dispatch('close')}>
+<div class="modal-overlay" role="presentation" on:click|self={() => dispatch('close')}>
   <div class="modal">
     <h3>Add Tasks</h3>
-    <p class="hint">Type a single task, or paste a bullet/ordered list to create multiple tasks at once.</p>
+    <p class="hint">
+      Type a single task, or paste a bullet/ordered list to create multiple tasks at once.
+    </p>
 
     <textarea
       bind:value={content}
@@ -32,11 +39,7 @@
       rows="6"
     ></textarea>
 
-    <input
-      type="text"
-      bind:value={description}
-      placeholder="Optional description for all tasks"
-    />
+    <input type="text" bind:value={description} placeholder="Optional description for all tasks" />
 
     <div class="modal-actions">
       <button class="primary" on:click={handleSubmit}>Create</button>

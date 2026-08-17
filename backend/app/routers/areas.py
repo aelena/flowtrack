@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..dependencies import verify_api_key
 from ..models import Area, Project
-from ..schemas import AreaCreate, AreaUpdate, AreaOut
+from ..schemas import AreaCreate, AreaOut, AreaUpdate
 
 router = APIRouter(prefix="/api/areas", tags=["areas"], dependencies=[Depends(verify_api_key)])
 

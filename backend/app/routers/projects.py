@@ -1,18 +1,22 @@
 import io
 import json
+import os
 import zipfile
+from datetime import UTC
+from datetime import datetime as dt
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from ..config import settings
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Project, Task, TaskStatus, ProjectStatus
-from ..schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectListOut
+from ..models import Project, Snippet, TaskStatus
+from ..schemas import CollaboratorCreate, ProjectCreate, ProjectListOut, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_api_key)])
 
@@ -37,19 +41,15 @@ async def list_projects(
     query = select(Project).options(selectinload(Project.tasks)).where(Project.archived == archived)
 
     if search:
-        query = query.where(
-            Project.work_name.ilike(f"%{search}%") | Project.final_name.ilike(f"%{search}%")
-        )
+        query = query.where(Project.work_name.ilike(f"%{search}%") | Project.final_name.ilike(f"%{search}%"))
     if area_id:
         query = query.where(Project.area_id == area_id)
     if tag:
         query = query.where(Project.tags.contains([tag]))
 
-    sort_col = getattr(Project, sort_by, Project.created_at)
-    if sort_order == "asc":
-        query = query.order_by(sort_col.asc())
-    else:
-        query = query.order_by(sort_col.desc())
+    ALLOWED_SORT = {"created_at", "work_name", "star_rating", "updated_at", "subjective_completion"}
+    sort_col = getattr(Project, sort_by) if sort_by in ALLOWED_SORT else Project.created_at
+    query = query.order_by(sort_col.asc() if sort_order == "asc" else sort_col.desc())
 
     result = await db.execute(query)
     projects = result.scalars().all()
@@ -66,7 +66,9 @@ async def list_projects(
 async def get_all_tags(db: AsyncSession = Depends(get_db)):
     """Get all unique tags across all projects."""
     result = await db.execute(
-        text("SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM projects WHERE tags IS NOT NULL AND tags != '[]'::jsonb ORDER BY tag")
+        text(
+            "SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM projects WHERE tags IS NOT NULL AND tags != '[]'::jsonb ORDER BY tag"
+        )
     )
     return [row[0] for row in result.fetchall()]
 
@@ -102,9 +104,22 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
     if not project:
         raise HTTPException(404, "Project not found")
     for field, value in data.model_dump(exclude_unset=True).items():
-        if field == 'status' and value is not None:
-            value = ProjectStatus(value)
         setattr(project, field, value)
+    await db.commit()
+    await db.refresh(project)
+    out = ProjectOut.model_validate(project)
+    out.task_completion = compute_task_completion(project.tasks)
+    return out
+
+
+async def _set_archived(project_id: UUID, archived: bool, db: AsyncSession) -> ProjectOut:
+    result = await db.execute(
+        select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    project.archived = archived
     await db.commit()
     await db.refresh(project)
     out = ProjectOut.model_validate(project)
@@ -114,21 +129,16 @@ async def update_project(project_id: UUID, data: ProjectUpdate, db: AsyncSession
 
 @router.post("/{project_id}/archive", response_model=ProjectOut)
 async def archive_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(404, "Project not found")
-    project.archived = True
-    await db.commit()
-    await db.refresh(project)
-    out = ProjectOut.model_validate(project)
-    out.task_completion = compute_task_completion(project.tasks)
-    return out
+    return await _set_archived(project_id, True, db)
 
 
-@router.post("/{project_id}/export")
+@router.post("/{project_id}/unarchive", response_model=ProjectOut)
+async def unarchive_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Archiving was one-way: there was no route back out of the archive."""
+    return await _set_archived(project_id, False, db)
+
+
+@router.get("/{project_id}/export")
 async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Project)
@@ -139,9 +149,13 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
     if not project:
         raise HTTPException(404, "Project not found")
 
+    snippets_result = await db.execute(
+        select(Snippet).where(Snippet.project_id == project_id).order_by(Snippet.created_at)
+    )
+    snippets = snippets_result.scalars().all()
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Project metadata
         meta = {
             "work_name": project.work_name,
             "final_name": project.final_name,
@@ -159,20 +173,27 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
         }
         zf.writestr("project.json", json.dumps(meta, indent=2))
 
-        # Tasks
         tasks_data = [
-            {"title": t.title, "description": t.description, "status": t.status.value}
-            for t in project.tasks
+            {"title": t.title, "description": t.description, "status": t.status.value} for t in project.tasks
         ]
         zf.writestr("tasks.json", json.dumps(tasks_data, indent=2))
 
-        # Notes
-        notes_data = [{"content": n.content, "task_id": str(n.task_id) if n.task_id else None} for n in project.notes]
+        notes_data = [
+            {"content": n.content, "task_id": str(n.task_id) if n.task_id else None} for n in project.notes
+        ]
         zf.writestr("notes.json", json.dumps(notes_data, indent=2))
 
-        # Files
-        import os
-        from ..config import settings
+        snippets_data = [
+            {
+                "snippet_type": s.snippet_type,
+                "content": s.content,
+                "source_url": s.source_url,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in snippets
+        ]
+        zf.writestr("snippets.json", json.dumps(snippets_data, indent=2))
+
         for f in project.files:
             full_path = os.path.join(settings.storage_path, f.file_path)
             if os.path.exists(full_path):
@@ -180,9 +201,8 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
                 zf.write(full_path, arcname)
 
     buf.seek(0)
-    from datetime import datetime as dt
     name = project.work_name.replace(" ", "_")
-    ts = dt.utcnow().strftime("%Y%m%d-%H%M%S")
+    ts = dt.now(UTC).strftime("%Y%m%d-%H%M%S")
     filename = f"{name}-{ts}.zip"
     return StreamingResponse(
         buf,
@@ -204,7 +224,8 @@ async def get_pending(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
     pending_tasks = [
         {"id": str(t.id), "title": t.title, "status": t.status.value}
-        for t in project.tasks if t.status != TaskStatus.done
+        for t in project.tasks
+        if t.status != TaskStatus.done
     ]
     return {
         "project": project.work_name,
@@ -216,7 +237,9 @@ async def get_pending(project_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{project_id}/collaborators", response_model=ProjectOut)
-async def add_collaborator(project_id: UUID, collaborator: dict, db: AsyncSession = Depends(get_db)):
+async def add_collaborator(
+    project_id: UUID, collaborator: CollaboratorCreate, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(
         select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
     )
@@ -224,7 +247,7 @@ async def add_collaborator(project_id: UUID, collaborator: dict, db: AsyncSessio
     if not project:
         raise HTTPException(404, "Project not found")
     collabs = list(project.collaborators or [])
-    collabs.append(collaborator)
+    collabs.append(collaborator.model_dump())
     project.collaborators = collabs
     await db.commit()
     await db.refresh(project)

@@ -1,8 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { language, apiKey } from '$lib/stores.js';
-  import { getConfigYaml, putConfigYaml, resetConfig, exportBackup, importBackup } from '$lib/api.js';
+  import { language, apiKey, showToast } from '$lib/stores.js';
+  import {
+    getConfigYaml,
+    putConfigYaml,
+    resetConfig,
+    exportBackup,
+    importBackup,
+  } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
+  import { tsFilename } from '$lib/utils.js';
 
   let yamlContent = '';
   let status = '';
@@ -10,7 +17,7 @@
   let loading = true;
   let currentApiKey = '';
 
-  apiKey.subscribe(v => currentApiKey = v);
+  apiKey.subscribe((v) => (currentApiKey = v));
 
   onMount(async () => {
     await loadConfig();
@@ -32,27 +39,28 @@
 
   async function saveConfig() {
     try {
-      const result = await putConfigYaml(yamlContent);
-      if (result.error) {
-        status = result.error;
-        statusType = 'error';
-      } else {
-        status = 'Configuration saved';
-        statusType = 'success';
-      }
+      await putConfigYaml(yamlContent);
+      status = 'Configuration saved';
+      statusType = 'success';
     } catch (e) {
+      // Invalid YAML now comes back as a 422 with a problem+json detail rather
+      // than a 200 carrying an { error } body.
       status = 'Save failed: ' + e.message;
       statusType = 'error';
     }
-    setTimeout(() => status = '', 3000);
+    setTimeout(() => (status = ''), 3000);
   }
 
   async function handleReset() {
-    const data = await resetConfig();
-    await loadConfig();
-    status = 'Configuration reset to defaults';
-    statusType = 'success';
-    setTimeout(() => status = '', 3000);
+    try {
+      await resetConfig();
+      await loadConfig();
+      status = 'Configuration reset to defaults';
+      statusType = 'success';
+      setTimeout(() => (status = ''), 3000);
+    } catch (e) {
+      showToast(e.message);
+    }
   }
 
   let importInput;
@@ -70,14 +78,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const d = new Date();
-      const ts = d.getFullYear().toString()
-        + String(d.getMonth() + 1).padStart(2, '0')
-        + String(d.getDate()).padStart(2, '0')
-        + '-' + String(d.getHours()).padStart(2, '0')
-        + String(d.getMinutes()).padStart(2, '0')
-        + String(d.getSeconds()).padStart(2, '0');
-      a.download = `flowtrack-backup-${ts}.json`;
+      a.download = tsFilename('flowtrack-backup', 'json');
       a.click();
       URL.revokeObjectURL(url);
       importStatus = 'Backup exported successfully';
@@ -86,7 +87,7 @@
       importStatus = 'Export failed: ' + e.message;
       importStatusType = 'error';
     }
-    setTimeout(() => importStatus = '', 3000);
+    setTimeout(() => (importStatus = ''), 3000);
   }
 
   async function handleImportBackup(e) {
@@ -97,14 +98,20 @@
       const data = JSON.parse(text);
       const result = await importBackup(data);
       const i = result.imported;
-      importStatus = `Imported: ${i.areas} areas, ${i.projects} projects, ${i.tasks} tasks, ${i.notes} notes, ${i.snippets} snippets`;
+      const s = result.skipped || {};
+      const skippedTotal = Object.values(s).reduce((a, b) => a + b, 0);
+      importStatus =
+        `Imported: ${i.areas} areas, ${i.projects} projects, ${i.tasks} tasks, ${i.notes} notes, ${i.snippets} snippets` +
+        (skippedTotal
+          ? ` — skipped ${skippedTotal} record${skippedTotal === 1 ? '' : 's'} that already existed`
+          : '');
       importStatusType = 'success';
     } catch (e) {
       importStatus = 'Import failed: ' + e.message;
       importStatusType = 'error';
     }
     if (importInput) importInput.value = '';
-    setTimeout(() => importStatus = '', 5000);
+    setTimeout(() => (importStatus = ''), 5000);
   }
 </script>
 
@@ -118,7 +125,13 @@
   <div class="settings-section">
     <h2>API Key</h2>
     <p class="section-desc">The key used to authenticate with the FlowTrack API.</p>
-    <input type="text" value={currentApiKey} on:change={handleApiKeyChange} placeholder="API Key" class="api-key-input" />
+    <input
+      type="text"
+      value={currentApiKey}
+      on:change={handleApiKeyChange}
+      placeholder="API Key"
+      class="api-key-input"
+    />
   </div>
 
   <div class="settings-section">
@@ -131,11 +144,7 @@
     {#if loading}
       <p class="loading-text">Loading configuration...</p>
     {:else}
-      <textarea
-        class="yaml-editor"
-        bind:value={yamlContent}
-        rows="30"
-        spellcheck="false"
+      <textarea class="yaml-editor" bind:value={yamlContent} rows="30" spellcheck="false"
       ></textarea>
 
       <div class="settings-actions">
@@ -152,22 +161,52 @@
   <div class="settings-section">
     <h2>Backup &amp; Restore</h2>
     <p class="section-desc">
-      Export all project data (areas, projects, tasks, notes, snippets) as a JSON file for backup or transfer.
-      File attachments are not included — use the per-project ZIP export for that.
+      Export all project data (areas, projects, tasks, notes, snippets) as a JSON file for backup or
+      transfer. File attachments are not included — use the per-project ZIP export for that.
     </p>
     <div class="backup-actions">
       <button class="primary" on:click={handleExportBackup}>
-        <svg viewBox="0 0 16 16" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
-          <path d="M8 2v7M5 6l3 3 3-3M3 11v2h10v-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg
+          viewBox="0 0 16 16"
+          width="14"
+          height="14"
+          style="vertical-align: middle; margin-right: 4px;"
+        >
+          <path
+            d="M8 2v7M5 6l3 3 3-3M3 11v2h10v-2"
+            stroke="currentColor"
+            stroke-width="1.5"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
         Export All Data (JSON)
       </button>
       <label class="import-label">
-        <svg viewBox="0 0 16 16" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
-          <path d="M8 10V3M5 6l3-3 3 3M3 11v2h10v-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg
+          viewBox="0 0 16 16"
+          width="14"
+          height="14"
+          style="vertical-align: middle; margin-right: 4px;"
+        >
+          <path
+            d="M8 10V3M5 6l3-3 3 3M3 11v2h10v-2"
+            stroke="currentColor"
+            stroke-width="1.5"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
         Import Data (JSON)
-        <input type="file" accept=".json" bind:this={importInput} on:change={handleImportBackup} hidden />
+        <input
+          type="file"
+          accept=".json"
+          bind:this={importInput}
+          on:change={handleImportBackup}
+          hidden
+        />
       </label>
     </div>
     {#if importStatus}
@@ -223,8 +262,16 @@ cli:
     overflow-y: auto;
   }
 
-  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
-  h2 { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
 
   .settings-desc {
     color: var(--text-secondary);
@@ -285,8 +332,14 @@ cli:
     font-size: 0.85rem;
   }
 
-  .status-msg.success { background: #e8f5e9; color: #2e7d32; }
-  .status-msg.error { background: #ffebee; color: #c62828; }
+  .status-msg.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .status-msg.error {
+    background: #ffebee;
+    color: #c62828;
+  }
 
   .reference {
     font-family: var(--font-mono);
@@ -300,7 +353,10 @@ cli:
     color: var(--text-secondary);
   }
 
-  .loading-text { color: var(--text-muted); font-size: 0.85rem; }
+  .loading-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
 
   .backup-actions {
     display: flex;

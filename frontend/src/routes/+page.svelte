@@ -3,7 +3,7 @@
   import { t } from '$lib/i18n.js';
 
   let lang = 'en';
-  language.subscribe(v => lang = v);
+  language.subscribe((v) => (lang = v));
 </script>
 
 <div class="home">
@@ -21,7 +21,9 @@
             <h3>{project.work_name}</h3>
             <div class="card-meta">
               {#if project.star_rating}
-                <span class="stars">{'★'.repeat(project.star_rating)}{'☆'.repeat(5 - project.star_rating)}</span>
+                <span class="stars"
+                  >{'★'.repeat(project.star_rating)}{'☆'.repeat(5 - project.star_rating)}</span
+                >
               {/if}
               <div class="progress-bar" style="margin-top: 0.5rem;">
                 <div class="fill" style="width: {project.task_completion}%"></div>
@@ -83,7 +85,9 @@
     border-radius: var(--radius);
     text-decoration: none;
     color: var(--text);
-    transition: box-shadow var(--transition), border-color var(--transition);
+    transition:
+      box-shadow var(--transition),
+      border-color var(--transition);
   }
 
   .project-card:hover {
