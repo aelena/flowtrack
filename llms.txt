@@ -24,6 +24,7 @@ Run it with `cp .env.example .env && docker compose up --build`. The `.env` step
 - [routers/backup.py](backend/app/routers/backup.py): Full JSON export and import. Import skips records whose id already exists and reports what it skipped.
 - [routers/files.py](backend/app/routers/files.py): Uploads streamed in chunks with the size limit enforced during the read.
 - [routers/config.py](backend/app/routers/config.py): YAML configuration, read redacted and written with secrets restored.
+- [routers/documents.py](backend/app/routers/documents.py): Deterministic PRD/BRD/MRD generation from project fields. No model is involved and none is planned.
 
 ## Frontend
 
@@ -31,6 +32,14 @@ Run it with `cp .env.example .env && docker compose up --build`. The `.env` step
 - [stores.js](frontend/src/lib/stores.js): Svelte stores. Preferences persist through a `persisted()` helper that degrades to memory when storage is unavailable.
 - [Sidebar.svelte](frontend/src/lib/components/Sidebar.svelte): Collapsible project tree with search, filters and drag-and-drop between areas.
 - [ProjectView.svelte](frontend/src/lib/components/ProjectView.svelte): Project detail and the file tree panel.
+
+## MCP server
+
+FlowTrack does not call a model. It exposes itself to an agent instead, which is why the chat endpoint, the suggestion heuristics and the `llm_providers` table were deleted rather than implemented.
+
+- [mcp-server/README](mcp-server/README.md): Install, configuration, and what each tool and prompt is for.
+- [mcp-server/src/flowtrack_mcp/server.py](mcp-server/src/flowtrack_mcp/server.py): Seven tools shaped around portfolio questions rather than REST endpoints, two markdown resources, and three prompts — `reckoning`, `next`, `close-out` — which is where the opinions live.
+- [mcp-server/src/flowtrack_mcp/client.py](mcp-server/src/flowtrack_mcp/client.py): Thin async client over the REST API.
 
 ## Optional
 

@@ -100,7 +100,11 @@ class ProjectListOut(BaseModel):
     star_rating: int | None
     task_completion: float = 0.0
     subjective_completion: int
+    # Staleness and overdue are the two questions a portfolio list exists to
+    # answer, and neither could be asked without these two fields.
+    desired_end_date: date | None
     created_at: datetime
+    updated_at: datetime
     model_config = {"from_attributes": True}
 
 
@@ -187,27 +191,3 @@ class SnippetOut(BaseModel):
     source_url: str | None
     created_at: datetime
     model_config = {"from_attributes": True}
-
-
-# --- LLM ---
-class LLMProviderCreate(BaseModel):
-    name: str
-    provider_type: str
-    config: dict = {}
-
-
-class LLMProviderOut(BaseModel):
-    id: UUID
-    name: str
-    provider_type: str
-    config: dict
-    created_at: datetime
-    model_config = {"from_attributes": True}
-
-
-class ChatMessage(BaseModel):
-    message: str
-
-
-class GenerateRequest(BaseModel):
-    format: str | None = "json"
