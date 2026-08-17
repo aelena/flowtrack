@@ -1,11 +1,23 @@
-from sqlalchemy import text
+import asyncio
+import logging
+from pathlib import Path
+
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
+from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
 from .config import settings
+
+logger = logging.getLogger("flowtrack")
 
 engine = create_async_engine(settings.database_url, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 
 class Base(DeclarativeBase):
@@ -17,85 +29,56 @@ async def get_db():
         yield session
 
 
-# Hand-rolled, idempotent schema patches applied on every startup.
-#
-# create_all() creates missing *tables* but never adds missing *columns* to
-# tables that already exist, so columns introduced after a database was first
-# created have to be patched in here. Each block is written to be safe to run
-# repeatedly.
-#
-# This is a stopgap. The right answer is Alembic, and it gets cheaper to adopt
-# the sooner it happens — see IMPROVEMENT-PLAN.md.
-_MIGRATIONS = """
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    -- projects.status ------------------------------------------------------
-    -- Older databases got this column as VARCHAR(20) from a previous version
-    -- of this block, while databases created by create_all() got the native
-    -- projectstatus enum. That divergence meant the same code ran against two
-    -- different schemas. Converge everything on the enum.
-
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'projectstatus') THEN
-        CREATE TYPE projectstatus AS ENUM ('active', 'on_hold', 'deprecated');
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'projects' AND column_name = 'status'
-    ) THEN
-        ALTER TABLE projects
-            ADD COLUMN status projectstatus DEFAULT 'active'::projectstatus;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'projects'
-          AND column_name = 'status'
-          AND data_type = 'character varying'
-    ) THEN
-        ALTER TABLE projects ALTER COLUMN status DROP DEFAULT;
-        ALTER TABLE projects
-            ALTER COLUMN status TYPE projectstatus USING status::projectstatus;
-        ALTER TABLE projects
-            ALTER COLUMN status SET DEFAULT 'active'::projectstatus;
-    END IF;
-
-    -- projects.tags --------------------------------------------------------
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'projects' AND column_name = 'tags'
-    ) THEN
-        ALTER TABLE projects ADD COLUMN tags JSONB DEFAULT '[]'::jsonb;
-    END IF;
-
-    -- timezone-aware timestamps --------------------------------------------
-    -- Columns were originally created as `timestamp without time zone` and
-    -- written with naive UTC values, so the API emitted timestamps with no
-    -- offset and clients rendered them as local time. Convert in place,
-    -- interpreting the existing values as the UTC they always were.
-
-    FOR r IN
-        SELECT table_name, column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND data_type = 'timestamp without time zone'
-          AND table_name IN (
-              'areas', 'projects', 'tasks', 'notes',
-              'project_files', 'llm_providers', 'snippets'
-          )
-    LOOP
-        EXECUTE format(
-            'ALTER TABLE %I ALTER COLUMN %I TYPE timestamptz USING %I AT TIME ZONE ''UTC''',
-            r.table_name, r.column_name, r.column_name
-        );
-    END LOOP;
-END $$;
-"""
+def _inspect_state(sync_conn) -> tuple[bool, bool]:
+    """(has application tables, has an alembic version table)."""
+    tables = set(inspect(sync_conn).get_table_names())
+    return "projects" in tables, "alembic_version" in tables
 
 
-async def init_db():
+def _config() -> Config:
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("script_location", str(ALEMBIC_INI.parent / "alembic"))
+    return cfg
+
+
+def _adopt_and_upgrade() -> None:
+    """Stamp a pre-Alembic database at the base revision, then migrate forward.
+
+    Stamping straight to head would be wrong as soon as a second revision
+    exists: the legacy schema matches the *initial* revision, not whatever the
+    latest one happens to be.
+
+    Called via asyncio.to_thread — alembic's env.py drives the async engine with
+    asyncio.run(), which raises if a loop is already running on the thread, and
+    FastAPI's lifespan hook is exactly that situation.
+    """
+    cfg = _config()
+    base = ScriptDirectory.from_config(cfg).get_base()
+    command.stamp(cfg, base)
+    command.upgrade(cfg, "head")
+
+
+def _upgrade() -> None:
+    command.upgrade(_config(), "head")
+
+
+async def init_db() -> None:
+    """Bring the schema up to date, adopting a pre-Alembic database if needed.
+
+    Replaces the previous create_all() plus a hand-written DO block. That
+    approach could not add columns to existing tables reliably, and produced
+    different column types depending on whether a database was created fresh or
+    patched — projects.status was a native enum in one case and VARCHAR in the
+    other.
+    """
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(text(_MIGRATIONS))
+        has_tables, has_version = await conn.run_sync(_inspect_state)
+
+    if has_tables and not has_version:
+        # A database created by the old create_all() path. Its schema already
+        # matches the initial revision, so record that rather than replaying it.
+        logger.info("Adopting existing pre-Alembic database: stamping base, then upgrading")
+        await asyncio.to_thread(_adopt_and_upgrade)
+        return
+
+    await asyncio.to_thread(_upgrade)

@@ -1,0 +1,38 @@
+# FlowTrack
+
+> An opinionated personal project tracker: a triage tool for people with too many side projects, not a to-do app. Every project carries `abandonment_criteria` written up front, and two competing completion figures — one computed from tasks, one your own honest estimate. SvelteKit frontend (7027), FastAPI backend (7028), PostgreSQL 16 (7029), all under Docker Compose. Single user, single static API key, designed for localhost.
+
+Run it with `cp .env.example .env && docker compose up --build`. The `.env` step is not optional; without it the database container has no credentials.
+
+## Start here
+
+- [README](README.md): What it is, how to run it, the full feature list, and an explicit table of which AI features do not exist yet.
+- [specs.md](specs.md): The original product specification the tool was built from. Unpolished, and the clearest statement of why it refuses to be a normal project manager.
+- [CONTRIBUTING](CONTRIBUTING.md): What is welcome, what is not, and how to run the checks.
+- [SECURITY](SECURITY.md): Threat model, what has been addressed, known limitations.
+
+## Backend
+
+- [main.py](backend/app/main.py): FastAPI app, router wiring, and RFC 7807 problem+json exception handlers.
+- [models.py](backend/app/models.py): Area, Project, Task, Note, ProjectFile, Snippet, LLMProvider. Timestamps are timezone-aware.
+- [schemas.py](backend/app/schemas.py): Pydantic request and response models. Status fields are typed with their enums, which is what makes an invalid value a 422 rather than a 500.
+- [database.py](backend/app/database.py): Async SQLAlchemy setup. On startup it runs Alembic migrations, and adopts a pre-Alembic database by stamping the base revision before migrating forward.
+- [alembic/](backend/alembic/): Migrations. `env.py` takes its URL from the app settings, so there is one source of truth for the connection string.
+- [redaction.py](backend/app/redaction.py): Redacts provider secrets on the way out and restores them when an edited config is written back.
+- [routers/projects.py](backend/app/routers/projects.py): Project CRUD, archive and unarchive, ZIP export, pending summary.
+- [routers/tasks.py](backend/app/routers/tasks.py): Task CRUD, including bulk creation by parsing a pasted markdown list.
+- [routers/backup.py](backend/app/routers/backup.py): Full JSON export and import. Import skips records whose id already exists and reports what it skipped.
+- [routers/files.py](backend/app/routers/files.py): Uploads streamed in chunks with the size limit enforced during the read.
+- [routers/config.py](backend/app/routers/config.py): YAML configuration, read redacted and written with secrets restored.
+
+## Frontend
+
+- [api.js](frontend/src/lib/api.js): Every endpoint, one client.
+- [stores.js](frontend/src/lib/stores.js): Svelte stores. Preferences persist through a `persisted()` helper that degrades to memory when storage is unavailable.
+- [Sidebar.svelte](frontend/src/lib/components/Sidebar.svelte): Collapsible project tree with search, filters and drag-and-drop between areas.
+- [ProjectView.svelte](frontend/src/lib/components/ProjectView.svelte): Project detail and the file tree panel.
+
+## Optional
+
+- [Chrome extension](extension/): Clips URLs and text selections into a project. Needs the declared `host_permissions` to reach the API at all.
+- [CI workflow](.github/workflows/ci.yml): ruff, pytest against a Postgres service, eslint, prettier, build, and a full compose smoke test.
