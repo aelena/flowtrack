@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
-  import { language, apiKey, showToast } from '$lib/stores.js';
+  import { language, apiKey, launcherUrl, showToast } from '$lib/stores.js';
+  import { launcherAvailable } from '$lib/launcher.js';
   import {
     getConfigYaml,
     putConfigYaml,
@@ -20,6 +21,7 @@
   apiKey.subscribe((v) => (currentApiKey = v));
 
   onMount(async () => {
+    refreshLauncherState();
     await loadConfig();
   });
 
@@ -35,6 +37,25 @@
     } finally {
       loading = false;
     }
+  }
+
+  let currentLauncherUrl = '';
+  let launcherState = 'checking';
+
+  launcherUrl.subscribe((v) => (currentLauncherUrl = v));
+
+  async function refreshLauncherState() {
+    if (!currentLauncherUrl) {
+      launcherState = 'off';
+      return;
+    }
+    launcherState = 'checking';
+    launcherState = (await launcherAvailable()) ? 'up' : 'down';
+  }
+
+  function handleLauncherUrlChange(e) {
+    launcherUrl.set(e.target.value.trim());
+    refreshLauncherState();
   }
 
   async function saveConfig() {
@@ -135,10 +156,39 @@
   </div>
 
   <div class="settings-section">
+    <h2>Session launcher</h2>
+    <p class="section-desc">
+      Optional. A small process you run on your own machine so the "Open session" button on a note
+      can start a terminal in the project directory — something the containerised API cannot do.
+      Without it, those buttons copy the equivalent command instead. See <code
+        >launcher/README.md</code
+      >.
+    </p>
+    <input
+      type="text"
+      value={currentLauncherUrl}
+      on:change={handleLauncherUrlChange}
+      placeholder="http://localhost:7030 — leave empty to disable"
+      class="api-key-input"
+    />
+    <p class="launcher-status {launcherState}">
+      {#if launcherState === 'checking'}
+        Checking…
+      {:else if launcherState === 'up'}
+        Reachable. Note buttons will open a session.
+      {:else if launcherState === 'off'}
+        Disabled. Note buttons will copy the command instead.
+      {:else}
+        Not reachable. Note buttons will copy the command instead.
+      {/if}
+    </p>
+  </div>
+
+  <div class="settings-section">
     <h2>Configuration (YAML)</h2>
     <p class="section-desc">
-      Configure LLM providers, IDE paths, and CLI commands. Use <code>{'{project_dir}'}</code> as a placeholder
-      for the project's local directory in IDE args.
+      Configure IDE paths and CLI commands. Use <code>{'{project_dir}'}</code> as a placeholder for the
+      project's local directory in IDE args.
     </p>
 
     {#if loading}
@@ -235,6 +285,20 @@ cli:
 </div>
 
 <style>
+  .launcher-status {
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .launcher-status.up {
+    color: #2e7d32;
+  }
+
+  .launcher-status.down {
+    color: #b26a00;
+  }
+
   .settings-page {
     flex: 1;
     padding: 2rem;
