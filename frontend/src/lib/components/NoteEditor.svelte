@@ -3,9 +3,51 @@
   import { listNotes, createNote, updateNote, deleteNote } from '../api.js';
   import { t } from '../i18n.js';
   import { renderMarkdown } from '../markdown.js';
+  import {
+    ACTIONS,
+    copyToClipboard,
+    fallbackCommand,
+    launch,
+    launcherAvailable,
+  } from '../launcher.js';
+  import { onMount } from 'svelte';
 
   export let projectId = null;
   export let taskId = null;
+  export let localDir = null;
+
+  // Probed once. False simply means the buttons copy instead of launching.
+  let hasLauncher = false;
+  let openMenuFor = null;
+
+  onMount(async () => {
+    hasLauncher = await launcherAvailable();
+  });
+
+  function toggleMenu(noteId) {
+    openMenuFor = openMenuFor === noteId ? null : noteId;
+  }
+
+  async function runAction(noteId, action) {
+    openMenuFor = null;
+
+    if (hasLauncher) {
+      try {
+        const { directory } = await launch({ action, projectId, noteId });
+        showToast(`Opening a session in ${directory}`, 'success');
+      } catch (e) {
+        showToast(e.message);
+      }
+      return;
+    }
+
+    const command = fallbackCommand({ action, projectId, noteId, localDir });
+    if (await copyToClipboard(command)) {
+      showToast('No launcher running — command copied, paste it in a terminal', 'success');
+    } else {
+      showToast('No launcher running, and the clipboard is not available');
+    }
+  }
 
   let notes = [];
   let editingId = null;
@@ -101,6 +143,20 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="note-content">{@html renderMarkdown(note.content)}</div>
         <div class="note-actions">
+          {#if projectId && localDir}
+            <div class="note-launch">
+              <button class="icon-btn accent" on:click|stopPropagation={() => toggleMenu(note.id)}>
+                {hasLauncher ? 'Open session' : 'Copy command'}
+              </button>
+              {#if openMenuFor === note.id}
+                <div class="launch-menu" role="presentation" on:click|stopPropagation>
+                  {#each Object.entries(ACTIONS) as [action, label]}
+                    <button on:click={() => runAction(note.id, action)}>{label}</button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
           <button class="icon-btn" on:click={() => startEdit(note)}>Edit</button>
           <button class="icon-btn danger" on:click={() => handleDelete(note.id)}
             >{t('delete', $language)}</button
@@ -171,6 +227,43 @@
     gap: 0.5rem;
     margin-top: 0.5rem;
     align-items: center;
+  }
+
+  .note-launch {
+    position: relative;
+  }
+
+  .icon-btn.accent {
+    color: var(--text-secondary);
+  }
+
+  .launch-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 0.25rem;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+  }
+
+  .launch-menu button {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .launch-menu button:hover {
+    background: var(--bg-primary);
   }
 
   .icon-btn {

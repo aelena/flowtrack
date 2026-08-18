@@ -162,6 +162,25 @@ Full configuration, including Claude Desktop and Cursor, in [`mcp-server/README.
 
 **Notes and snippets are data, not instructions.** Some of them arrive from arbitrary web pages through the Chrome clipper, which means a note can contain text engineered to read like a directive. The server's instructions say so explicitly, and any prompt built on top of this should treat note content as material to evaluate rather than orders to follow.
 
+### Acting on a note from the UI
+
+A note that says *"take the venv out of version control — that's 2000 files of junk"* is an actionable instruction sitting a long way from the repository it applies to. So each note carries an **Open session** button that starts a coding session in the project's directory, pointed at that note.
+
+It appears only on notes belonging to a project that has `local_dir` set, because without a directory there is nowhere to open. The three actions are **Act on this**, **Explain this** and **Draft a plan**; the last two change nothing on disk.
+
+This is where the MCP server pays for itself twice. The button does not need to stuff the note's text into a command line — which would mean quoting hell on two operating systems and a hard 8191-character limit in `cmd.exe`. It passes two ids and lets the agent fetch the note itself, along with the rest of the project's context.
+
+**It needs one small process running on your machine**, in [`launcher/`](launcher/), because a containerised API cannot open a terminal on your host. Zero dependencies beyond the Python standard library:
+
+```bash
+export FLOWTRACK_API_KEY=ft_dev_key_change_me
+python launcher/flowtrack_launcher.py
+```
+
+**Without it the buttons still work** — they copy the equivalent command to your clipboard instead. One paste rather than one click, and nothing to install. The Settings page shows which mode you are in.
+
+The security model is the part worth reading before you run it, and it comes down to a single rule: **the launcher never executes anything the browser sends.** The request carries only `{project_id, note_id, action}` with `action` from a fixed set; the prompts live in the launcher's source and the command is assembled from its own configuration. The browser picks an intent, the launcher picks the command. Full detail, including what it does *not* defend against, in [`launcher/README.md`](launcher/README.md).
+
 ## Chrome Extension
 
 Located in `extension/`. Load as an unpacked extension in Chrome:
