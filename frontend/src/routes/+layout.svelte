@@ -4,6 +4,8 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { t } from '$lib/i18n.js';
 
   onMount(() => {
     const unsubTheme = theme.subscribe((v) => {
@@ -35,6 +37,23 @@
       <div class="toolbar-left">
         {#if !$sidebarOpen}
           <button class="icon-btn" on:click={() => sidebarOpen.set(true)}>☰</button>
+        {/if}
+        <!-- Every other route was a dead end: the only way back to the
+             portfolio view was the browser button or a sidebar entry. -->
+        {#if $page.url.pathname !== '/'}
+          <a
+            href="/"
+            class="icon-btn home-link"
+            title={t('home', $language)}
+            aria-label={t('home', $language)}
+          >
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8 1.3 1 7.1v.9h1.9V14h3.6v-3.7h3V14h3.6V8h1.9v-.9z"
+              />
+            </svg>
+          </a>
         {/if}
         <span class="brand">FlowTrack</span>
       </div>
@@ -136,6 +155,20 @@
 
   .icon-btn:hover {
     background: var(--bg-tertiary);
+  }
+
+  /* .icon-btn was written for a button; as an anchor it needs the underline
+     removed and the glyph centred on the line. */
+  .home-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    line-height: 1;
+  }
+
+  .home-link:hover {
+    color: var(--text);
+    text-decoration: none;
   }
 
   .toggle-btn {
