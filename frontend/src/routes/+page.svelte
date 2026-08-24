@@ -41,7 +41,7 @@
     { key: 'star_rating', label: 'colStars', align: 'left' },
     { key: 'task_completion', label: 'colCompletion', align: 'right' },
     { key: 'desired_end_date', label: 'colTarget', align: 'right' },
-    { key: 'last_activity_at', label: 'colActivity', align: 'right' }
+    { key: 'last_activity_at', label: 'colActivity', align: 'right' },
   ];
 
   // "Search by any field" taken literally: every value a row displays plus the
@@ -59,7 +59,7 @@
       shortDate(p.desired_end_date),
       shortDate(p.created_at),
       shortDate(p.updated_at),
-      shortDate(p.last_activity_at)
+      shortDate(p.last_activity_at),
     ]
       .filter((v) => v !== null && v !== undefined && v !== '')
       .join(' ')
@@ -139,7 +139,8 @@
       class:active={$homeView === 'all'}
       on:click={() => homeView.set('all')}
     >
-      {t('allProjects', lang)} {#if rows.length}<span class="count">{rows.length}</span>{/if}
+      {t('allProjects', lang)}
+      {#if rows.length}<span class="count">{rows.length}</span>{/if}
     </button>
   </div>
 

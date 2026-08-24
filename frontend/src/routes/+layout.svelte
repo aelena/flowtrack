@@ -48,10 +48,7 @@
             aria-label={t('home', $language)}
           >
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M8 1.3 1 7.1v.9h1.9V14h3.6v-3.7h3V14h3.6V8h1.9v-.9z"
-              />
+              <path fill="currentColor" d="M8 1.3 1 7.1v.9h1.9V14h3.6v-3.7h3V14h3.6V8h1.9v-.9z" />
             </svg>
           </a>
         {/if}
