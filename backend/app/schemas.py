@@ -105,6 +105,11 @@ class ProjectListOut(BaseModel):
     desired_end_date: date | None
     created_at: datetime
     updated_at: datetime
+    # updated_at only moves when the project row itself is edited, so it says
+    # nothing about whether any work happened. This is the latest of the project,
+    # its tasks and its notes, which is what "recent" has to mean for a list of
+    # projects to be worth reading.
+    last_activity_at: datetime | None = None
     model_config = {"from_attributes": True}
 
 
