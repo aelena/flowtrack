@@ -8,17 +8,45 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..config import settings
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Project, Snippet, TaskStatus
+from ..models import Note, Project, Snippet, Task, TaskStatus
 from ..schemas import CollaboratorCreate, ProjectCreate, ProjectListOut, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_api_key)])
+
+
+def last_activity_expr():
+    """The most recent of the project, its tasks and its notes.
+
+    Editing a task or a note bumps that row's updated_at and leaves the project
+    row alone, so ordering a project list by Project.updated_at surfaces projects
+    nobody has touched in a week alongside ones edited minutes ago. This is
+    computed in SQL rather than in Python so that it can be sorted and paginated
+    by the database.
+    """
+    latest_task = (
+        select(func.max(Task.updated_at))
+        .where(Task.project_id == Project.id)
+        .correlate(Project)
+        .scalar_subquery()
+    )
+    latest_note = (
+        select(func.max(Note.updated_at))
+        .where(Note.project_id == Project.id)
+        .correlate(Project)
+        .scalar_subquery()
+    )
+    return func.greatest(
+        Project.updated_at,
+        func.coalesce(latest_task, Project.updated_at),
+        func.coalesce(latest_note, Project.updated_at),
+    )
 
 
 def compute_task_completion(tasks):
@@ -38,7 +66,8 @@ async def list_projects(
     archived: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Project).options(selectinload(Project.tasks)).where(Project.archived == archived)
+    activity = last_activity_expr().label("last_activity_at")
+    query = select(Project, activity).options(selectinload(Project.tasks)).where(Project.archived == archived)
 
     if search:
         query = query.where(Project.work_name.ilike(f"%{search}%") | Project.final_name.ilike(f"%{search}%"))
@@ -47,17 +76,29 @@ async def list_projects(
     if tag:
         query = query.where(Project.tags.contains([tag]))
 
-    ALLOWED_SORT = {"created_at", "work_name", "star_rating", "updated_at", "subjective_completion"}
-    sort_col = getattr(Project, sort_by) if sort_by in ALLOWED_SORT else Project.created_at
+    ALLOWED_SORT = {
+        "created_at",
+        "work_name",
+        "star_rating",
+        "updated_at",
+        "subjective_completion",
+        "last_activity_at",
+    }
+    if sort_by == "last_activity_at":
+        sort_col = activity
+    elif sort_by in ALLOWED_SORT:
+        sort_col = getattr(Project, sort_by)
+    else:
+        sort_col = Project.created_at
     query = query.order_by(sort_col.asc() if sort_order == "asc" else sort_col.desc())
 
     result = await db.execute(query)
-    projects = result.scalars().all()
 
     out = []
-    for p in projects:
-        data = ProjectListOut.model_validate(p)
-        data.task_completion = compute_task_completion(p.tasks)
+    for project, last_activity in result.all():
+        data = ProjectListOut.model_validate(project)
+        data.task_completion = compute_task_completion(project.tasks)
+        data.last_activity_at = last_activity
         out.append(data)
     return out
 

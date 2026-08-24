@@ -111,3 +111,64 @@ async def test_export_project(client):
     resp = await client.get(f"/api/projects/{pid}/export", headers=HEADERS)
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"
+
+
+@pytest.mark.asyncio
+async def test_last_activity_follows_tasks_not_the_project_row(client):
+    """Touching a task has to count as activity on its project.
+
+    Editing a task bumps the task's updated_at and leaves the project row alone,
+    so a list ordered by Project.updated_at showed projects nobody had opened in
+    a week above ones edited minutes ago.
+    """
+    resp = await client.post("/api/projects/", json={"work_name": "Quiet"}, headers=HEADERS)
+    quiet_id = resp.json()["id"]
+    resp = await client.post("/api/projects/", json={"work_name": "Busy"}, headers=HEADERS)
+    busy_id = resp.json()["id"]
+
+    # Only the second project gets any work done on it, and none of that work is
+    # an edit to the project itself.
+    resp = await client.post(
+        f"/api/projects/{busy_id}/tasks/", json={"content": "Do the thing"}, headers=HEADERS
+    )
+    assert resp.status_code in (200, 201)
+
+    listed = {p["id"]: p for p in (await client.get("/api/projects/", headers=HEADERS)).json()}
+
+    busy = listed[busy_id]
+    quiet = listed[quiet_id]
+    assert busy["last_activity_at"] is not None
+    assert quiet["last_activity_at"] is not None
+
+    # The project row itself was never edited after creation, so the task is the
+    # only thing that can have moved this.
+    assert busy["last_activity_at"] > busy["updated_at"]
+    assert quiet["last_activity_at"] == quiet["updated_at"]
+    assert busy["last_activity_at"] > quiet["last_activity_at"]
+
+
+@pytest.mark.asyncio
+async def test_sort_by_last_activity(client):
+    resp = await client.post("/api/projects/", json={"work_name": "Older"}, headers=HEADERS)
+    older_id = resp.json()["id"]
+    resp = await client.post("/api/projects/", json={"work_name": "Newer"}, headers=HEADERS)
+    newer_id = resp.json()["id"]
+
+    await client.post(f"/api/projects/{older_id}/tasks/", json={"content": "first"}, headers=HEADERS)
+    await client.post(f"/api/projects/{newer_id}/tasks/", json={"content": "second"}, headers=HEADERS)
+
+    resp = await client.get("/api/projects/?sort_by=last_activity_at&sort_order=desc", headers=HEADERS)
+    assert resp.status_code == 200
+    order = [p["id"] for p in resp.json()]
+    assert order.index(newer_id) < order.index(older_id)
+
+    resp = await client.get("/api/projects/?sort_by=last_activity_at&sort_order=asc", headers=HEADERS)
+    order = [p["id"] for p in resp.json()]
+    assert order.index(older_id) < order.index(newer_id)
+
+
+@pytest.mark.asyncio
+async def test_unknown_sort_key_still_falls_back(client):
+    """An unrecognised sort_by must not 500 now that the sort has three branches."""
+    resp = await client.get("/api/projects/?sort_by=; DROP TABLE projects", headers=HEADERS)
+    assert resp.status_code == 200

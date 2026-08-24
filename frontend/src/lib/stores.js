@@ -47,6 +47,9 @@ export const theme = persisted('theme', 'light');
 export const language = persisted('language', 'en');
 export const font = persisted('font', 'Segoe UI');
 export const sidebarOpen = persisted('sidebarOpen', true);
+// Which face of the home page: the six most recently touched projects, or the
+// full sortable table. Remembered, because it is a working preference.
+export const homeView = persisted('homeView', 'recent');
 export const apiKey = persisted('apiKey', 'ft_dev_key_change_me');
 // The host-side launcher. Empty disables the feature entirely, and the note
 // buttons fall back to putting the command on the clipboard.
