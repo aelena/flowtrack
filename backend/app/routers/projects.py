@@ -67,11 +67,7 @@ async def list_projects(
     db: AsyncSession = Depends(get_db),
 ):
     activity = last_activity_expr().label("last_activity_at")
-    query = (
-        select(Project, activity)
-        .options(selectinload(Project.tasks))
-        .where(Project.archived == archived)
-    )
+    query = select(Project, activity).options(selectinload(Project.tasks)).where(Project.archived == archived)
 
     if search:
         query = query.where(Project.work_name.ilike(f"%{search}%") | Project.final_name.ilike(f"%{search}%"))

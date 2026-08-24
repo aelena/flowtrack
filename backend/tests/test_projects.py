@@ -154,23 +154,15 @@ async def test_sort_by_last_activity(client):
     resp = await client.post("/api/projects/", json={"work_name": "Newer"}, headers=HEADERS)
     newer_id = resp.json()["id"]
 
-    await client.post(
-        f"/api/projects/{older_id}/tasks/", json={"content": "first"}, headers=HEADERS
-    )
-    await client.post(
-        f"/api/projects/{newer_id}/tasks/", json={"content": "second"}, headers=HEADERS
-    )
+    await client.post(f"/api/projects/{older_id}/tasks/", json={"content": "first"}, headers=HEADERS)
+    await client.post(f"/api/projects/{newer_id}/tasks/", json={"content": "second"}, headers=HEADERS)
 
-    resp = await client.get(
-        "/api/projects/?sort_by=last_activity_at&sort_order=desc", headers=HEADERS
-    )
+    resp = await client.get("/api/projects/?sort_by=last_activity_at&sort_order=desc", headers=HEADERS)
     assert resp.status_code == 200
     order = [p["id"] for p in resp.json()]
     assert order.index(newer_id) < order.index(older_id)
 
-    resp = await client.get(
-        "/api/projects/?sort_by=last_activity_at&sort_order=asc", headers=HEADERS
-    )
+    resp = await client.get("/api/projects/?sort_by=last_activity_at&sort_order=asc", headers=HEADERS)
     order = [p["id"] for p in resp.json()]
     assert order.index(older_id) < order.index(newer_id)
 
