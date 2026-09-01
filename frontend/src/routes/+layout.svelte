@@ -1,13 +1,35 @@
 <script>
   import '../app.css';
-  import { theme, language, font, sidebarOpen } from '$lib/stores.js';
+  import { theme, language, font, sidebarOpen, unlocked } from '$lib/stores.js';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Toast from '$lib/components/Toast.svelte';
+  import LockScreen from '$lib/components/LockScreen.svelte';
+  import { getLock } from '$lib/api.js';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { t } from '$lib/i18n.js';
 
+  // 'checking' until the API has answered. The app must not render first and
+  // lock a moment later: a dashboard visible for two hundred milliseconds is a
+  // dashboard that was read.
+  let gate = 'checking';
+
+  async function checkLock() {
+    gate = 'checking';
+    try {
+      const { enabled, lock_on_open } = await getLock();
+      gate = enabled && lock_on_open ? 'locked' : 'open';
+    } catch {
+      // The API did not answer, so whether this is locked is unknown. Staying
+      // in 'checking' keeps the data off the screen; failing open would let an
+      // API blip bypass the lock, and failing to a lock screen would ask for a
+      // password nothing can verify.
+      gate = 'unreachable';
+    }
+  }
+
   onMount(() => {
+    checkLock();
     const unsubTheme = theme.subscribe((v) => {
       document.documentElement.setAttribute('data-theme', v);
     });
@@ -29,6 +51,16 @@
   }
 </script>
 
+{#if gate === 'checking'}
+  <div class="gate" aria-busy="true"></div>
+{:else if gate === 'unreachable'}
+  <div class="gate">
+    <p>Cannot reach the API, so whether this is locked is unknown.</p>
+    <button class="toggle-btn" on:click={checkLock}>Retry</button>
+  </div>
+{:else if gate === 'locked' && !$unlocked}
+  <LockScreen />
+{:else}
 <div class="app-layout">
   <Sidebar />
 
@@ -94,6 +126,7 @@
     </main>
   </div>
 </div>
+{/if}
 
 <Toast />
 
@@ -102,6 +135,18 @@
     display: flex;
     height: 100vh;
     overflow: hidden;
+  }
+
+  .gate {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: var(--bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
   }
 
   .main-area {

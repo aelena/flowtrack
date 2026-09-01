@@ -121,6 +121,21 @@ export const getConfigYaml = () => request('GET', '/api/config/yaml');
 export const putConfigYaml = (yaml) => request('PUT', '/api/config/yaml', { yaml });
 export const resetConfig = () => request('POST', '/api/config/reset');
 
+// The UI lock. Verification happens on the server, so the hash never reaches
+// the browser. This gates the interface, not the data: every route above is
+// behind the same API key, which the MCP server and the extension also hold.
+export const getLock = () => request('GET', '/api/config/lock');
+export const verifyLock = (password) => request('POST', '/api/config/lock/verify', { password });
+export const setLockPassword = (newPassword, currentPassword) =>
+  request('PUT', '/api/config/lock/password', {
+    new_password: newPassword,
+    current_password: currentPassword ?? '',
+  });
+export const removeLockPassword = (currentPassword) =>
+  request('DELETE', '/api/config/lock/password', { current_password: currentPassword });
+export const setLockOnOpen = (lockOnOpen) =>
+  request('PUT', '/api/config/lock/settings', { lock_on_open: lockOnOpen });
+
 // Backup
 export const exportBackup = () => request('GET', '/api/backup/export');
 export const importBackup = (data) => request('POST', '/api/backup/import', data);

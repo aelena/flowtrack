@@ -55,6 +55,36 @@ export const apiKey = persisted('apiKey', 'ft_dev_key_change_me');
 // buttons fall back to putting the command on the clipboard.
 export const launcherUrl = persisted('launcherUrl', 'http://localhost:7030');
 
+// Unlocked for this browser session only. sessionStorage, not localStorage, on
+// purpose: the setting is called "ask when the tool is opened", and with
+// localStorage the answer would survive closing the browser and it would never
+// ask again. A reload inside the same tab does not re-prompt, which is the
+// behaviour that makes the lock tolerable to live with.
+function sessionFlag(key) {
+  const storageKey = STORAGE_PREFIX + key;
+  let start = false;
+  if (browser) {
+    try {
+      start = sessionStorage.getItem(storageKey) === 'true';
+    } catch {
+      // Blocked or full: the session just starts locked.
+    }
+  }
+  const store = writable(start);
+  if (browser) {
+    store.subscribe((value) => {
+      try {
+        sessionStorage.setItem(storageKey, value ? 'true' : 'false');
+      } catch {
+        // Nothing to do. Worst case the tab asks again.
+      }
+    });
+  }
+  return store;
+}
+
+export const unlocked = sessionFlag('unlocked');
+
 export const toasts = writable([]);
 
 let toastId = 0;
