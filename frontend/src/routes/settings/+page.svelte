@@ -239,9 +239,9 @@
   <div class="settings-section">
     <h2>{t('lockSection', $language)}</h2>
     <p class="section-desc">
-      Ask for a password when FlowTrack is opened. This covers the interface, not the data: the
-      API is protected by the API key above, and the MCP server, the browser extension and the
-      launcher all hold it. It stops somebody sitting down at an unlocked machine.
+      Ask for a password when FlowTrack is opened. This covers the interface, not the data: the API
+      is protected by the API key above, and the MCP server, the browser extension and the launcher
+      all hold it. It stops somebody sitting down at an unlocked machine.
     </p>
     <p class="section-desc lock-recovery">
       <strong>If you forget it:</strong> delete the <code>security</code> block from

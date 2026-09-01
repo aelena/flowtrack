@@ -1,9 +1,9 @@
 <script>
   import { onMount } from 'svelte';
   import { homeView, language } from '$lib/stores.js';
-  import { listProjects } from '$lib/api.js';
+  import { listProjects, getThroughput } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
-  import { daysSince, shortDate } from '$lib/utils.js';
+  import { daysSince, projectHealth, shortDate } from '$lib/utils.js';
 
   let lang = 'en';
   language.subscribe((v) => (lang = v));
@@ -16,7 +16,16 @@
   let loading = true;
   let loadError = '';
 
+  // Throughput is a nice-to-have on this page. It loads separately and its
+  // failure is silent, because a metrics endpoint being down is no reason to
+  // withhold the project list.
+  let flow = null;
+
   onMount(async () => {
+    getThroughput(12)
+      .then((data) => (flow = data))
+      .catch(() => (flow = null));
+
     try {
       rows = await listProjects({ sort_by: 'last_activity_at', sort_order: 'desc' });
     } catch (e) {
@@ -25,6 +34,20 @@
       loading = false;
     }
   });
+
+  const ARROW = { up: '↑', down: '↓', flat: '→' };
+
+  /** Points for a sparkline, scaled to the tallest week rather than to zero. */
+  function sparkPoints(weeks, width = 132, height = 26) {
+    if (!weeks || weeks.length < 2) return '';
+    const peak = Math.max(...weeks.map((w) => w.completed), 1);
+    const step = width / (weeks.length - 1);
+    return weeks
+      .map(
+        (w, i) => `${(i * step).toFixed(1)},${(height - (w.completed / peak) * height).toFixed(1)}`
+      )
+      .join(' ');
+  }
 
   const name = (p) => p.final_name || p.work_name || '';
 
@@ -36,6 +59,9 @@
   const PER_PAGE = 15;
 
   const COLUMNS = [
+    // Unlabelled and unsortable: it is a dot, and sorting by colour would sort
+    // by a category the reader cannot see the order of.
+    { key: null, label: 'colHealth', align: 'left' },
     { key: 'name', label: 'colProject', align: 'left' },
     { key: 'status', label: 'colStatus', align: 'left' },
     { key: 'star_rating', label: 'colStars', align: 'left' },
@@ -124,6 +150,41 @@
     <p>Select a project from the sidebar to get started, or create a new one.</p>
   </div>
 
+  {#if flow}
+    <div class="flow">
+      <div class="card">
+        <span class="card-label">{t('thisWeek', lang)}</span>
+        <span class="card-number">{flow.last_7_days}</span>
+        <span class="card-delta card-delta--{flow.trend}">
+          {ARROW[flow.trend]}
+          {flow.change > 0 ? '+' : ''}{flow.change}
+          <span class="card-vs">vs {flow.previous_7_days} {t('lastWeek', lang)}</span>
+        </span>
+      </div>
+
+      <div class="card card--wide">
+        <span class="card-label">{t('twelveWeeks', lang)}</span>
+        <svg class="spark" viewBox="0 0 132 26" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={sparkPoints(flow.weeks)} fill="none" stroke="currentColor" />
+        </svg>
+        <span class="card-range">
+          {flow.weeks[0]?.week_start} &rarr; {flow.weeks[flow.weeks.length - 1]?.week_start}
+        </span>
+      </div>
+    </div>
+
+    {#if flow.estimated_counted > 0}
+      <!-- Said out loud rather than buried. Most of this history predates the
+           column that records a completion date, so it was filled in from when
+           the row last changed. Close for most, late for anything edited after
+           it was closed. -->
+      <p class="flow-note">
+        {flow.estimated_counted} / {flow.total_counted}
+        {t('estimatedNote', lang)}
+      </p>
+    {/if}
+  {/if}
+
   <div class="view-switch" role="tablist">
     <button
       role="tab"
@@ -200,17 +261,28 @@
             <tr>
               {#each COLUMNS as col}
                 <th class:num={col.align === 'right'}>
-                  <button on:click={() => sortBy(col.key)} class:sorted={sortKey === col.key}>
-                    {t(col.label, lang)}
-                    <span class="arrow">{sortKey === col.key ? (sortAsc ? '↑' : '↓') : ''}</span>
-                  </button>
+                  {#if col.key}
+                    <button on:click={() => sortBy(col.key)} class:sorted={sortKey === col.key}>
+                      {t(col.label, lang)}
+                      <span class="arrow">{sortKey === col.key ? (sortAsc ? '↑' : '↓') : ''}</span>
+                    </button>
+                  {/if}
                 </th>
               {/each}
             </tr>
           </thead>
           <tbody>
             {#each pageRows as p (p.id)}
+              {@const health = projectHealth(p)}
               <tr>
+                <td class="health-cell">
+                  <span
+                    class="dot dot--{health.level}"
+                    title={health.reason}
+                    aria-label={health.reason}
+                    role="img"
+                  ></span>
+                </td>
                 <td><a href="/projects/{p.id}">{name(p)}</a></td>
                 <td><span class="status status--{p.status}">{p.status}</span></td>
                 <td class="stars">
@@ -502,5 +574,123 @@
   .pager button:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  /* --- throughput ------------------------------------------------------- */
+
+  .flow {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    min-width: 9rem;
+  }
+
+  .card--wide {
+    flex: 1;
+    min-width: 14rem;
+    color: var(--text-secondary);
+  }
+
+  .card-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+
+  .card-number {
+    font-size: 1.6rem;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  .card-delta {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card-delta--up {
+    color: #2e7d32;
+  }
+
+  .card-delta--down {
+    color: #c0392b;
+  }
+
+  .card-delta--flat {
+    color: var(--text-secondary);
+  }
+
+  .card-vs {
+    color: var(--text-secondary);
+  }
+
+  .spark {
+    width: 100%;
+    height: 26px;
+    margin: 0.25rem 0;
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .card-range {
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .flow-note {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+
+  /* --- health dot ------------------------------------------------------- */
+
+  .health-cell {
+    width: 1.2rem;
+    padding-right: 0;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    /* A ring rather than a bare fill, so the grey one still reads as a
+       deliberate state and not as a missing value. */
+    box-shadow: 0 0 0 1px var(--bg-secondary);
+  }
+
+  .dot--good {
+    background: #2e7d32;
+  }
+
+  .dot--warn {
+    background: #e08a00;
+  }
+
+  .dot--bad {
+    background: #c0392b;
+  }
+
+  .dot--frozen {
+    background: #9aa0a6;
+  }
+
+  .dot--unknown {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--border);
   }
 </style>
