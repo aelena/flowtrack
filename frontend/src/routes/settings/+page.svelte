@@ -8,6 +8,10 @@
     resetConfig,
     exportBackup,
     importBackup,
+    getLock,
+    setLockPassword,
+    removeLockPassword,
+    setLockOnOpen,
   } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
   import { tsFilename } from '$lib/utils.js';
@@ -20,9 +24,86 @@
 
   apiKey.subscribe((v) => (currentApiKey = v));
 
+  // --- The password lock ---
+  // What it does and does not protect is in backend/app/passwords.py, and the
+  // note below says the short version on screen. A lock whose reach is
+  // misunderstood is worse than no lock.
+  let lock = { enabled: false, lock_on_open: true };
+  let lockCurrent = '';
+  let lockNew = '';
+  let lockRepeat = '';
+  let lockError = '';
+  let lockBusy = false;
+
+  async function loadLock() {
+    try {
+      lock = await getLock();
+    } catch (e) {
+      status = 'Failed to load lock state: ' + e.message;
+      statusType = 'error';
+    }
+  }
+
+  function clearLockFields() {
+    lockCurrent = '';
+    lockNew = '';
+    lockRepeat = '';
+    lockError = '';
+  }
+
+  async function savePassword() {
+    lockError = '';
+    if (lockNew.length < 6) {
+      lockError = t('lockTooShort', $language);
+      return;
+    }
+    if (lockNew !== lockRepeat) {
+      // Checked here as well as being asked for twice, because the cost of a
+      // typo in this particular field is being locked out of your own tool.
+      lockError = t('lockMismatch', $language);
+      return;
+    }
+    lockBusy = true;
+    try {
+      await setLockPassword(lockNew, lockCurrent);
+      clearLockFields();
+      await loadLock();
+      showToast(t('lockSaved', $language), 'success');
+    } catch (e) {
+      lockError = e.message;
+    } finally {
+      lockBusy = false;
+    }
+  }
+
+  async function removePassword() {
+    lockError = '';
+    lockBusy = true;
+    try {
+      await removeLockPassword(lockCurrent);
+      clearLockFields();
+      await loadLock();
+      showToast(t('lockRemoved', $language), 'success');
+    } catch (e) {
+      lockError = e.message;
+    } finally {
+      lockBusy = false;
+    }
+  }
+
+  async function toggleLockOnOpen(event) {
+    const value = event.target.checked;
+    try {
+      lock = await setLockOnOpen(value);
+    } catch (e) {
+      event.target.checked = !value;
+      showToast(e.message, 'error');
+    }
+  }
+
   onMount(async () => {
     refreshLauncherState();
-    await loadConfig();
+    await Promise.all([loadConfig(), loadLock()]);
   });
 
   async function loadConfig() {
@@ -153,6 +234,75 @@
       placeholder="API Key"
       class="api-key-input"
     />
+  </div>
+
+  <div class="settings-section">
+    <h2>{t('lockSection', $language)}</h2>
+    <p class="section-desc">
+      Ask for a password when FlowTrack is opened. This covers the interface, not the data: the
+      API is protected by the API key above, and the MCP server, the browser extension and the
+      launcher all hold it. It stops somebody sitting down at an unlocked machine.
+    </p>
+    <p class="section-desc lock-recovery">
+      <strong>If you forget it:</strong> delete the <code>security</code> block from
+      <code>storage/flowtrack.yaml</code> and reload. With Docker:
+      <code>docker compose exec api sed -i '/^security:/,$d' /app/storage/flowtrack.yaml</code>
+    </p>
+
+    <label class="lock-toggle">
+      <input
+        type="checkbox"
+        checked={lock.lock_on_open}
+        disabled={!lock.enabled}
+        on:change={toggleLockOnOpen}
+      />
+      {t('lockAskOnOpen', $language)}
+    </label>
+
+    <p class="lock-state">
+      {lock.enabled ? t('lockChange', $language) : t('lockNoPassword', $language)}
+    </p>
+
+    <div class="lock-fields">
+      {#if lock.enabled}
+        <input
+          type="password"
+          bind:value={lockCurrent}
+          placeholder={t('lockCurrent', $language)}
+          autocomplete="current-password"
+          class="api-key-input"
+        />
+      {/if}
+      <input
+        type="password"
+        bind:value={lockNew}
+        placeholder={t('lockNew', $language)}
+        autocomplete="new-password"
+        class="api-key-input"
+      />
+      <input
+        type="password"
+        bind:value={lockRepeat}
+        placeholder={t('lockConfirm', $language)}
+        autocomplete="new-password"
+        class="api-key-input"
+      />
+    </div>
+
+    {#if lockError}
+      <p class="lock-error" role="alert">{lockError}</p>
+    {/if}
+
+    <div class="lock-actions">
+      <button on:click={savePassword} disabled={lockBusy || !lockNew}>
+        {lock.enabled ? t('lockChange', $language) : t('lockSet', $language)}
+      </button>
+      {#if lock.enabled}
+        <button class="danger" on:click={removePassword} disabled={lockBusy || !lockCurrent}>
+          {t('lockRemove', $language)}
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="settings-section">
@@ -424,5 +574,57 @@ cli:
   .import-label:hover {
     background: var(--bg-tertiary);
     border-color: var(--accent);
+  }
+
+  .lock-recovery {
+    border-left: 2px solid var(--border);
+    padding-left: 0.6rem;
+  }
+
+  .lock-recovery code {
+    font-size: 0.72rem;
+    word-break: break-all;
+  }
+
+  .lock-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .lock-toggle input {
+    width: auto;
+  }
+
+  .lock-state {
+    margin: 0 0 0.4rem 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+
+  .lock-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-width: 22rem;
+  }
+
+  .lock-error {
+    margin: 0.5rem 0 0 0;
+    font-size: 0.75rem;
+    color: var(--danger, #c0392b);
+  }
+
+  .lock-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+  }
+
+  .lock-actions .danger {
+    border-color: var(--danger, #c0392b);
+    color: var(--danger, #c0392b);
   }
 </style>
