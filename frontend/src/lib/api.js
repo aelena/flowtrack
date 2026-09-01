@@ -121,6 +121,11 @@ export const getConfigYaml = () => request('GET', '/api/config/yaml');
 export const putConfigYaml = (yaml) => request('PUT', '/api/config/yaml', { yaml });
 export const resetConfig = () => request('POST', '/api/config/reset');
 
+// Dashboard throughput. Counts completed_at, never updated_at: see the
+// migration a1c7f2e93b40 for why those are different questions.
+export const getThroughput = (weeks = 12) =>
+  request('GET', `/api/metrics/throughput?weeks=${weeks}`);
+
 // The UI lock. Verification happens on the server, so the hash never reaches
 // the browser. This gates the interface, not the data: every route above is
 // behind the same API key, which the MCP server and the extension also hold.

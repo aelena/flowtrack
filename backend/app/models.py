@@ -77,6 +77,15 @@ class Task(Base):
     status = Column(SAEnum(TaskStatus), default=TaskStatus.new)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    # When the task actually became done, as opposed to when the row last
+    # changed. updated_at cannot answer this: editing the title of a finished
+    # task moves it, and so does reopening and re-closing one, which is exactly
+    # the case the throughput numbers care about.
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    # True for the rows filled in by the backfill, whose completed_at is
+    # updated_at standing in for a date nobody recorded. Kept so a chart can say
+    # which part of itself is a guess instead of presenting all of it as fact.
+    completed_at_estimated = Column(Boolean, default=False, nullable=False)
 
     project = relationship("Project", back_populates="tasks")
     notes = relationship("Note", back_populates="task", cascade="all, delete-orphan")

@@ -45,7 +45,6 @@
     <h1>{t('lockTitle', $language)}</h1>
     <p class="prompt">{t('lockPrompt', $language)}</p>
 
-    <!-- svelte-ignore a11y-autofocus -->
     <input
       bind:this={input}
       bind:value={password}

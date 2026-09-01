@@ -1,4 +1,5 @@
 import re
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..dependencies import verify_api_key
-from ..models import Task
+from ..models import Task, TaskStatus
 from ..schemas import TaskCreate, TaskOut, TaskUpdate
 
 router = APIRouter(
@@ -29,6 +30,29 @@ def parse_task_list(content: str) -> list[str]:
             # If no list format detected yet, treat entire content as single task
             return [content.strip()]
     return tasks if tasks else [content.strip()]
+
+
+def _apply_status(task: Task, status: TaskStatus) -> None:
+    """Move a task's status, keeping completed_at in step.
+
+    Only on a transition. Re-sending done for a task that is already done must
+    not move the timestamp, or every edit to a finished task would count as
+    another completion in the weekly numbers.
+
+    Leaving done clears it rather than keeping the old date. A reopened task has
+    not been completed, and a chart that still counts it is counting work that is
+    back on the pile.
+    """
+    was_done = task.status == TaskStatus.done
+    now_done = status == TaskStatus.done
+    task.status = status
+
+    if now_done and not was_done:
+        task.completed_at = datetime.now(UTC)
+        task.completed_at_estimated = False
+    elif was_done and not now_done:
+        task.completed_at = None
+        task.completed_at_estimated = False
 
 
 @router.get("/", response_model=list[TaskOut])
@@ -61,7 +85,7 @@ async def update_task(project_id: UUID, task_id: UUID, data: TaskUpdate, db: Asy
     if data.description is not None:
         task.description = data.description
     if data.status is not None:
-        task.status = data.status
+        _apply_status(task, data.status)
     await db.commit()
     await db.refresh(task)
     return task
