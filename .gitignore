@@ -48,6 +48,7 @@ Thumbs.db
 
 # Private working documents — not for the public repo
 IMPROVEMENT-PLAN.md
+ESTADO.md
 seed/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
