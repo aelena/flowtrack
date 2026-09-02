@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { daysSince, projectHealth, shortDate, tsFilename } from './utils.js';
+import {
+  clipPreview,
+  daysSince,
+  isInbox,
+  projectHealth,
+  safeExternalUrl,
+  shortDate,
+  tsFilename,
+} from './utils.js';
 
 describe('tsFilename', () => {
   it('slugifies whitespace so the download name is not broken', () => {
@@ -144,5 +152,69 @@ describe('projectHealth', () => {
     ]) {
       expect(projectHealth(p, NOW).reason).not.toBe('');
     }
+  });
+});
+
+describe('safeExternalUrl', () => {
+  it('accepts http and https', () => {
+    expect(safeExternalUrl('https://example.com/a?b=1')).toBe('https://example.com/a?b=1');
+    expect(safeExternalUrl('http://example.com/')).toBe('http://example.com/');
+  });
+
+  // The clipper stores whatever the page reported, so these are the inputs that
+  // matter: a link that executes when the user clicks it in the clip list.
+  it('rejects script-bearing schemes', () => {
+    expect(safeExternalUrl('javascript:alert(1)')).toBeNull();
+    expect(safeExternalUrl('JaVaScRiPt:alert(1)')).toBeNull();
+    expect(safeExternalUrl('data:text/html,<script>alert(1)</script>')).toBeNull();
+    expect(safeExternalUrl('vbscript:msgbox(1)')).toBeNull();
+    expect(safeExternalUrl('file:///etc/passwd')).toBeNull();
+  });
+
+  it('rejects empty, non-string and relative values', () => {
+    expect(safeExternalUrl(null)).toBeNull();
+    expect(safeExternalUrl('')).toBeNull();
+    expect(safeExternalUrl('   ')).toBeNull();
+    expect(safeExternalUrl(42)).toBeNull();
+    expect(safeExternalUrl('/just/a/path')).toBeNull();
+  });
+});
+
+describe('clipPreview', () => {
+  it('collapses whitespace so a pasted block stays one line', () => {
+    expect(clipPreview('an  idea\n\nworth   keeping')).toBe('an idea worth keeping');
+  });
+
+  it('truncates with an ellipsis past the limit', () => {
+    const out = clipPreview('x'.repeat(300));
+    expect(out).toHaveLength(241);
+    expect(out.endsWith('…')).toBe(true);
+  });
+
+  it('leaves short content alone and tolerates non-strings', () => {
+    expect(clipPreview('short')).toBe('short');
+    expect(clipPreview(null)).toBe('');
+  });
+});
+
+describe('isInbox / the clip inbox is not judged as a project', () => {
+  it('recognises the inbox by name, whatever the casing', () => {
+    expect(isInbox({ work_name: 'Inbox' })).toBe(true);
+    expect(isInbox({ work_name: '  inbox ' })).toBe(true);
+    expect(isInbox({ work_name: 'Inbox Zero' })).toBe(false);
+    expect(isInbox({})).toBe(false);
+    expect(isInbox(null)).toBe(false);
+  });
+
+  it('never shows the inbox as stale, however long it sits', () => {
+    const ancient = new Date('2020-01-01').toISOString();
+    const health = projectHealth({ work_name: 'Inbox', last_activity_at: ancient });
+    expect(health.level).toBe('frozen');
+    expect(health.reason).toMatch(/inbox/i);
+  });
+
+  it('still judges a normal project on the same data', () => {
+    const ancient = new Date('2020-01-01').toISOString();
+    expect(projectHealth({ work_name: 'Real', last_activity_at: ancient }).level).toBe('bad');
   });
 });

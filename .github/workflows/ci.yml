@@ -146,6 +146,30 @@ jobs:
       - name: Tests
         run: pytest -q
 
+  extension:
+    name: Extension — eslint and prettier
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: extension
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        # Lint tooling only. The extension ships as plain files and has no build.
+        run: npm ci
+
+      - name: Lint and format check
+        run: npm run lint
+
   compose:
     name: Stack — build and reach healthy
     runs-on: ubuntu-latest

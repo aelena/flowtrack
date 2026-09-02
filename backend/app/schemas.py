@@ -184,10 +184,21 @@ class CollaboratorCreate(BaseModel):
 
 # --- Snippet ---
 class SnippetCreate(BaseModel):
-    project_id: UUID
+    # None means "the inbox": a clip captured before it had a home. See app/inbox.py.
+    project_id: UUID | None = None
     type: str
     content: str
     source_url: str | None = None
+
+
+class ExtensionProjectCreate(BaseModel):
+    """Just a name. The clipper catches an idea; the rest is filled in later."""
+
+    name: str = Field(min_length=1, max_length=255)
+
+
+class SnippetUpdate(BaseModel):
+    project_id: UUID
 
 
 class SnippetOut(BaseModel):

@@ -18,6 +18,7 @@ from .routers import (
     metrics,
     notes,
     projects,
+    snippets,
     tasks,
 )
 
@@ -112,6 +113,7 @@ app.include_router(areas.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(notes.router)
+app.include_router(snippets.router)
 app.include_router(files.router)
 app.include_router(extension.router)
 app.include_router(documents.router)

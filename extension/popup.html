@@ -1,46 +1,61 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FlowTrack Clipper</title>
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-  <div class="container">
-    <h1>FlowTrack</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowTrack Clipper</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>FlowTrack</h1>
 
-    <div class="field">
-      <label for="apiUrl">API URL</label>
-      <input type="url" id="apiUrl" placeholder="http://localhost:7028">
+      <div class="field">
+        <label for="apiUrl">API URL</label>
+        <input type="url" id="apiUrl" placeholder="e.g. http://localhost:7028" />
+      </div>
+
+      <div class="field">
+        <label for="apiKey">API Key</label>
+        <!-- Never a real-looking value: this field is type=password, so a
+             placeholder that reads like a key is indistinguishable from a
+             filled-in one at a glance. -->
+        <input type="password" id="apiKey" placeholder="paste API_KEY from .env" />
+      </div>
+
+      <div class="field">
+        <label for="project">Project</label>
+        <select id="project">
+          <option value="">Not loaded &mdash; check the settings above</option>
+        </select>
+        <button id="newProject" class="btn-icon" title="New project">+</button>
+        <button id="refreshProjects" class="btn-icon refresh" title="Refresh projects">
+          &#x21bb;
+        </button>
+        <div id="newProjectRow" class="new-project-row" hidden>
+          <input type="text" id="newProjectName" placeholder="New project name" />
+          <button id="createProject" class="btn btn-primary btn-small">Create</button>
+          <button id="cancelNewProject" class="btn btn-small">Cancel</button>
+        </div>
+        <p class="hint">
+          Right-click &rarr; &ldquo;Save to FlowTrack&rdquo; clips here. Leave it on Inbox to decide
+          later.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="snippet">Snippet</label>
+        <textarea id="snippet" rows="4" placeholder="Paste or type text here..."></textarea>
+      </div>
+
+      <div class="actions">
+        <button id="saveUrl" class="btn">Save URL</button>
+        <button id="saveSnippet" class="btn btn-primary">Save Snippet</button>
+      </div>
+
+      <div id="status" class="status" hidden></div>
     </div>
 
-    <div class="field">
-      <label for="apiKey">API Key</label>
-      <input type="password" id="apiKey" placeholder="ft_dev_key_change_me">
-    </div>
-
-    <div class="field">
-      <label for="project">Project</label>
-      <select id="project">
-        <option value="">-- Select project --</option>
-      </select>
-      <button id="refreshProjects" class="btn-icon" title="Refresh projects">&#x21bb;</button>
-    </div>
-
-    <div class="field">
-      <label for="snippet">Snippet</label>
-      <textarea id="snippet" rows="4" placeholder="Paste or type text here..."></textarea>
-    </div>
-
-    <div class="actions">
-      <button id="saveUrl" class="btn">Save URL</button>
-      <button id="saveSnippet" class="btn btn-primary">Save Snippet</button>
-    </div>
-
-    <div id="status" class="status" hidden></div>
-  </div>
-
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>

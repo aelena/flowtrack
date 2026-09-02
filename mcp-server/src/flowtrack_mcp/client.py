@@ -69,6 +69,12 @@ class FlowTrackClient:
         params = {"project_id": project_id} if project_id else {}
         return await self._request("GET", "/api/notes/", params=params)
 
+    async def list_snippets(self, *, project_id: str | None = None, limit: int = 200) -> list[dict]:
+        params: dict[str, Any] = {"limit": limit}
+        if project_id:
+            params["project_id"] = project_id
+        return await self._request("GET", "/api/snippets/", params=params)
+
     async def list_areas(self) -> list[dict]:
         return await self._request("GET", "/api/areas/")
 
@@ -79,6 +85,9 @@ class FlowTrackClient:
 
     async def update_task(self, project_id: str, task_id: str, **fields: Any) -> dict:
         return await self._request("PUT", f"/api/projects/{project_id}/tasks/{task_id}", json=fields)
+
+    async def delete_snippet(self, snippet_id: str) -> None:
+        await self._request("DELETE", f"/api/snippets/{snippet_id}")
 
     async def create_note(self, **fields: Any) -> dict:
         return await self._request("POST", "/api/notes/", json=fields)
