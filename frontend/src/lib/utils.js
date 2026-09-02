@@ -63,9 +63,19 @@ export const TARGET_WARN_DAYS = 14;
  * because that was a decision, not an oversight, and painting a deliberate
  * freeze red is how the whole column stops being read.
  */
+// The clip inbox is a holding pen, not a project: it has no target date, it is
+// never "finished", and it is supposed to sit there collecting things. Judging
+// it on staleness would light up the one row where staleness means nothing.
+export const INBOX_NAME = 'Inbox';
+
+export function isInbox(project) {
+  return project?.work_name?.trim().toLowerCase() === INBOX_NAME.toLowerCase();
+}
+
 export function projectHealth(project, now = new Date()) {
   if (!project) return { level: 'unknown', reason: '' };
 
+  if (isInbox(project)) return { level: 'frozen', reason: 'Clip inbox, not a project' };
   if (project.archived) return { level: 'frozen', reason: 'Archived' };
   if (project.status === 'on_hold') return { level: 'frozen', reason: 'On hold, by decision' };
   if (project.status === 'deprecated') return { level: 'frozen', reason: 'Dropped' };
@@ -99,4 +109,29 @@ export function projectHealth(project, now = new Date()) {
   if (idle === null) return { level: 'unknown', reason: 'No activity recorded' };
 
   return { level: 'good', reason: `Active, last touched ${idle} day${idle === 1 ? '' : 's'} ago` };
+}
+
+// Clips arrive from arbitrary web pages through the Chrome clipper, so
+// source_url is attacker-controlled text, not a trusted link. Rendering it
+// straight into an href would accept `javascript:` and `data:` payloads that
+// run on click. Only the two schemes a page can legitimately be reached at
+// come back; anything else is shown as inert text by the caller.
+export function safeExternalUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) return null;
+  try {
+    const parsed = new URL(url, 'http://invalid.example');
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.hostname === 'invalid.example') return null; // was relative, so not a source
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+// A clip is often a wall of text. The list shows the first lines and the full
+// content stays one click away rather than pushing everything else off screen.
+export function clipPreview(content, max = 240) {
+  if (typeof content !== 'string') return '';
+  const collapsed = content.replace(/\s+/g, ' ').trim();
+  return collapsed.length > max ? collapsed.slice(0, max).trimEnd() + '…' : collapsed;
 }

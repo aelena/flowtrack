@@ -91,6 +91,17 @@ export const createNote = (data) => request('POST', '/api/notes/', data);
 export const updateNote = (id, content) => request('PUT', `/api/notes/${id}`, { content });
 export const deleteNote = (id) => request('DELETE', `/api/notes/${id}`);
 
+// Snippets — what the Chrome clipper writes. Until this existed the clipper
+// was write-only: clips were reachable through the project export zip and
+// nowhere else in the app.
+export const listSnippets = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request('GET', `/api/snippets/${qs ? '?' + qs : ''}`);
+};
+export const moveSnippet = (id, projectId) =>
+  request('PUT', `/api/snippets/${id}`, { project_id: projectId });
+export const deleteSnippet = (id) => request('DELETE', `/api/snippets/${id}`);
+
 // Files
 export const listFiles = (projectId) => request('GET', `/api/projects/${projectId}/files/`);
 export const uploadFile = async (projectId, file, folder = null) => {

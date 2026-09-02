@@ -7,7 +7,12 @@
     listFiles,
     uploadFile,
     deleteFile,
+    listSnippets,
+    deleteSnippet,
+    moveSnippet,
+    listProjects,
   } from '../api.js';
+  import { clipPreview, safeExternalUrl, shortDate } from '../utils.js';
   import { t } from '../i18n.js';
   import TaskList from './TaskList.svelte';
   import NoteEditor from './NoteEditor.svelte';
@@ -28,6 +33,11 @@
   let fileInput;
   let collapsedFileFolders = {};
 
+  // Clips from the Chrome clipper
+  let snippets = [];
+  let expandedClips = {};
+  let moveTargets = [];
+
   // Tag editing
   let newTag = '';
   let showTagInput = false;
@@ -38,6 +48,8 @@
       project = await getProject(projectId);
       writeContent = project.description || '';
       await loadFiles();
+      await loadSnippets();
+      await loadMoveTargets();
     } catch (e) {
       showToast(e.message);
     }
@@ -50,6 +62,52 @@
     } catch {
       files = [];
     }
+  }
+
+  async function loadSnippets() {
+    if (!projectId) return;
+    try {
+      snippets = await listSnippets({ project_id: projectId });
+    } catch {
+      snippets = [];
+    }
+  }
+
+  // Only loaded when there is something to re-file, so the ordinary project
+  // page does not pay for a second request.
+  async function loadMoveTargets() {
+    if (moveTargets.length || !snippets.length) return;
+    try {
+      const all = await listProjects({ archived: false });
+      moveTargets = all.filter((p) => p.id !== projectId);
+    } catch {
+      moveTargets = [];
+    }
+  }
+
+  async function handleClipMove(id, targetId) {
+    if (!targetId) return;
+    try {
+      await moveSnippet(id, targetId);
+      snippets = snippets.filter((s) => s.id !== id);
+      showToast('Clip re-filed');
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  async function handleClipDelete(id) {
+    if (!confirm('Delete this clip?')) return;
+    try {
+      await deleteSnippet(id);
+      snippets = snippets.filter((s) => s.id !== id);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  function toggleClip(id) {
+    expandedClips = { ...expandedClips, [id]: !expandedClips[id] };
   }
 
   // Convert empty strings to null for nullable fields
@@ -487,6 +545,73 @@
           {/each}
         {/if}
       </div>
+
+      <div class="clip-panel-header">
+        <h3>{t('clips', $language)}</h3>
+        {#if snippets.length}
+          <span class="clip-count">{snippets.length}</span>
+        {/if}
+      </div>
+
+      <div class="clip-list">
+        {#if snippets.length === 0}
+          <p class="file-empty">
+            No clips yet. Use the FlowTrack Clipper extension to save a page or a passage here.
+          </p>
+        {:else}
+          {#each snippets as clip (clip.id)}
+            {@const href = safeExternalUrl(clip.source_url)}
+            {@const expanded = expandedClips[clip.id]}
+            <div class="clip">
+              <div class="clip-top">
+                <span class="clip-type">{clip.snippet_type === 'url' ? 'link' : 'text'}</span>
+                <span class="clip-date">{shortDate(clip.created_at)}</span>
+                <button
+                  class="file-tree-action"
+                  on:click={() => handleClipDelete(clip.id)}
+                  title="Delete clip">×</button
+                >
+              </div>
+
+              <!-- Plain interpolation, never {@html}: this text came from an
+                   arbitrary web page through the clipper. -->
+              <p class="clip-body" class:expanded>
+                {expanded ? clip.content : clipPreview(clip.content)}
+              </p>
+
+              {#if clip.content.length > 240}
+                <button class="clip-more" on:click={() => toggleClip(clip.id)}>
+                  {expanded ? 'Show less' : 'Show more'}
+                </button>
+              {/if}
+
+              <select
+                class="clip-move"
+                on:change={(e) => {
+                  handleClipMove(clip.id, e.currentTarget.value);
+                  e.currentTarget.value = '';
+                }}
+              >
+                <option value="">Re-file to…</option>
+                {#each moveTargets as target}
+                  <option value={target.id}>{target.work_name}</option>
+                {/each}
+              </select>
+
+              {#if href}
+                <a class="clip-source" {href} target="_blank" rel="noopener noreferrer nofollow">
+                  {new URL(href).hostname}
+                </a>
+              {:else if clip.source_url}
+                <!-- Not http(s), so it is shown inert rather than made clickable. -->
+                <span class="clip-source unsafe" title="Not a linkable address"
+                  >{clip.source_url}</span
+                >
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </div>
     </aside>
   </div>
 {:else}
@@ -854,5 +979,100 @@
   }
   .file-tree-action:hover {
     color: var(--danger);
+  }
+
+  /* Clips — what the Chrome clipper writes into a project */
+  .clip-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0.75rem 0.25rem;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+  }
+  .clip-panel-header h3 {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .clip-count {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0 0.35rem;
+  }
+  .clip-list {
+    padding: 0 0.75rem 0.75rem;
+    overflow-y: auto;
+  }
+  .clip {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-primary);
+  }
+  .clip-top {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+  .clip-type {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 0.25rem;
+  }
+  .clip-date {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    margin-right: auto;
+  }
+  .clip-body {
+    font-size: 0.75rem;
+    line-height: 1.45;
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .clip-body.expanded {
+    white-space: pre-wrap;
+  }
+  .clip-more {
+    background: none;
+    border: none;
+    padding: 0.15rem 0;
+    font-size: 0.65rem;
+    color: var(--accent, var(--text-secondary));
+    cursor: pointer;
+  }
+  .clip-move {
+    width: 100%;
+    margin-top: 0.35rem;
+    font-size: 0.65rem;
+    padding: 0.15rem 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+  }
+  .clip-source {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    overflow-wrap: anywhere;
+  }
+  .clip-source.unsafe {
+    font-style: italic;
+    opacity: 0.7;
   }
 </style>
