@@ -47,6 +47,12 @@ export const theme = persisted('theme', 'light');
 export const language = persisted('language', 'en');
 export const font = persisted('font', 'Segoe UI');
 export const sidebarOpen = persisted('sidebarOpen', true);
+// Dragged from the sidebar's right edge. 280 matches the old fixed width, so
+// nobody sees a change until they reach for the handle.
+export const SIDEBAR_WIDTH_DEFAULT = 280;
+export const SIDEBAR_WIDTH_MIN = 200;
+export const SIDEBAR_WIDTH_MAX = 640;
+export const sidebarWidth = persisted('sidebarWidth', SIDEBAR_WIDTH_DEFAULT);
 // Which face of the home page: the most recently touched projects, or the
 // full sortable table. Remembered, because it is a working preference.
 export const homeView = persisted('homeView', 'recent');

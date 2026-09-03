@@ -1,6 +1,16 @@
 <script>
   import { onMount } from 'svelte';
-  import { projects, areas, sidebarOpen, language, showToast } from '../stores.js';
+  import {
+    projects,
+    areas,
+    sidebarOpen,
+    sidebarWidth,
+    SIDEBAR_WIDTH_DEFAULT,
+    SIDEBAR_WIDTH_MIN,
+    SIDEBAR_WIDTH_MAX,
+    language,
+    showToast,
+  } from '../stores.js';
   import {
     listProjects,
     listAreas,
@@ -220,408 +230,470 @@
   }
 
   $: groups = groupByArea($projects, $areas);
+  // --- Resizing ---
+  // Pointer capture on the handle, so the drag keeps working when the cursor
+  // races ahead of the edge. Width is the pointer's x: the sidebar starts at 0.
+  let resizing = false;
+
+  const clampWidth = (w) => Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(w)));
+
+  function startResize(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    resizing = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function moveResize(e) {
+    if (!resizing) return;
+    sidebarWidth.set(clampWidth(e.clientX));
+  }
+
+  function endResize(e) {
+    if (!resizing) return;
+    resizing = false;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  }
+
+  function resetWidth() {
+    sidebarWidth.set(SIDEBAR_WIDTH_DEFAULT);
+  }
+
+  function keyResize(e) {
+    const step = e.shiftKey ? 40 : 10;
+    if (e.key === 'ArrowLeft') sidebarWidth.set(clampWidth($sidebarWidth - step));
+    else if (e.key === 'ArrowRight') sidebarWidth.set(clampWidth($sidebarWidth + step));
+    else if (e.key === 'Home') sidebarWidth.set(SIDEBAR_WIDTH_MIN);
+    else if (e.key === 'End') sidebarWidth.set(SIDEBAR_WIDTH_MAX);
+    else return;
+    e.preventDefault();
+  }
 </script>
 
 <svelte:window on:click={closeMenus} />
 
 {#if $sidebarOpen}
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <h2>{t('projects', $language)}</h2>
-      <button class="icon-btn" on:click={() => sidebarOpen.set(false)} title="Collapse sidebar"
-        >←</button
-      >
-    </div>
+  <div class="sidebar-shell" class:resizing style="--sidebar-width: {$sidebarWidth}px">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>{t('projects', $language)}</h2>
+        <button class="icon-btn" on:click={() => sidebarOpen.set(false)} title="Collapse sidebar"
+          >←</button
+        >
+      </div>
 
-    <input
-      type="text"
-      placeholder={t('search', $language)}
-      bind:value={search}
-      on:input={doSearch}
-    />
+      <input
+        type="text"
+        placeholder={t('search', $language)}
+        bind:value={search}
+        on:input={doSearch}
+      />
 
-    <div class="sidebar-controls">
-      <select bind:value={filterArea} on:change={doSearch}>
-        <option value="">All {t('areas', $language)}</option>
-        {#each $areas as area}
-          <option value={area.id}>{area.name}</option>
-        {/each}
-      </select>
-      <select bind:value={sortBy} on:change={doSearch}>
-        <option value="created_at">Date</option>
-        <option value="work_name">Name</option>
-      </select>
-      <button
-        class="icon-btn small"
-        on:click={() => {
-          sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-          doSearch();
-        }}
-      >
-        {sortOrder === 'asc' ? '\u25B2' : '\u25BC'}
-      </button>
-    </div>
-
-    {#if allTags.length > 0}
-      <div class="tag-filter">
-        <select bind:value={filterTag} on:change={doSearch}>
-          <option value="">All Tags</option>
-          {#each allTags as tag}
-            <option value={tag}>{tag}</option>
+      <div class="sidebar-controls">
+        <select bind:value={filterArea} on:change={doSearch}>
+          <option value="">All {t('areas', $language)}</option>
+          {#each $areas as area}
+            <option value={area.id}>{area.name}</option>
           {/each}
         </select>
-        {#if filterTag}
-          <button
-            class="tag-clear"
-            on:click={() => {
-              filterTag = '';
-              doSearch();
-            }}
-            title="Clear tag filter">×</button
-          >
-        {/if}
+        <select bind:value={sortBy} on:change={doSearch}>
+          <option value="created_at">Date</option>
+          <option value="work_name">Name</option>
+        </select>
+        <button
+          class="icon-btn small"
+          on:click={() => {
+            sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+            doSearch();
+          }}
+        >
+          {sortOrder === 'asc' ? '\u25B2' : '\u25BC'}
+        </button>
       </div>
-    {/if}
 
-    <div class="sidebar-actions">
-      <button class="primary small" on:click={() => (showNewProject = true)}>+ Project</button>
-      <button class="small" on:click={() => (showNewArea = true)}>+ Folder</button>
-    </div>
-
-    {#if showNewProject}
-      <div class="inline-form">
-        <input
-          type="text"
-          bind:value={newProjectName}
-          placeholder="Project name"
-          on:keydown={(e) => e.key === 'Enter' && handleCreateProject()}
-        />
-        <div class="inline-actions">
-          <button class="primary small" on:click={handleCreateProject}
-            >{t('save', $language)}</button
-          >
-          <button class="small" on:click={() => (showNewProject = false)}
-            >{t('cancel', $language)}</button
-          >
+      {#if allTags.length > 0}
+        <div class="tag-filter">
+          <select bind:value={filterTag} on:change={doSearch}>
+            <option value="">All Tags</option>
+            {#each allTags as tag}
+              <option value={tag}>{tag}</option>
+            {/each}
+          </select>
+          {#if filterTag}
+            <button
+              class="tag-clear"
+              on:click={() => {
+                filterTag = '';
+                doSearch();
+              }}
+              title="Clear tag filter">×</button
+            >
+          {/if}
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    {#if showNewArea}
-      <div class="inline-form">
-        <input
-          type="text"
-          bind:value={newAreaName}
-          placeholder="Folder name"
-          on:keydown={(e) => e.key === 'Enter' && handleCreateArea()}
-        />
-        <div class="inline-actions">
-          <button class="primary small" on:click={handleCreateArea}>{t('save', $language)}</button>
-          <button class="small" on:click={() => (showNewArea = false)}
-            >{t('cancel', $language)}</button
-          >
+      <div class="sidebar-actions">
+        <button class="primary small" on:click={() => (showNewProject = true)}>+ Project</button>
+        <button class="small" on:click={() => (showNewArea = true)}>+ Folder</button>
+      </div>
+
+      {#if showNewProject}
+        <div class="inline-form">
+          <input
+            type="text"
+            bind:value={newProjectName}
+            placeholder="Project name"
+            on:keydown={(e) => e.key === 'Enter' && handleCreateProject()}
+          />
+          <div class="inline-actions">
+            <button class="primary small" on:click={handleCreateProject}
+              >{t('save', $language)}</button
+            >
+            <button class="small" on:click={() => (showNewProject = false)}
+              >{t('cancel', $language)}</button
+            >
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    <nav class="project-tree">
-      {#each $areas as area (area.id)}
+      {#if showNewArea}
+        <div class="inline-form">
+          <input
+            type="text"
+            bind:value={newAreaName}
+            placeholder="Folder name"
+            on:keydown={(e) => e.key === 'Enter' && handleCreateArea()}
+          />
+          <div class="inline-actions">
+            <button class="primary small" on:click={handleCreateArea}>{t('save', $language)}</button
+            >
+            <button class="small" on:click={() => (showNewArea = false)}
+              >{t('cancel', $language)}</button
+            >
+          </div>
+        </div>
+      {/if}
+
+      <nav class="project-tree">
+        {#each $areas as area (area.id)}
+          <div
+            class="tree-group"
+            role="group"
+            class:drop-target={dragProjectId}
+            on:dragover={onDragOver}
+            on:drop={(e) => onDropToArea(e, area.id)}
+          >
+            <div class="tree-group-header">
+              <button class="folder-toggle" on:click={() => toggleArea(area.id)}
+                >{collapsedAreas[area.id] ? '▶' : '▼'}</button
+              >
+              {#if editingAreaId === area.id}
+                <input
+                  class="rename-input"
+                  type="text"
+                  bind:value={editingAreaName}
+                  on:keydown={(e) => {
+                    if (e.key === 'Enter') handleRenameArea(area.id);
+                    if (e.key === 'Escape') editingAreaId = null;
+                  }}
+                  on:blur={() => (editingAreaId = null)}
+                />
+              {:else}
+                <span class="folder-name">{area.name}</span>
+                <span class="folder-count">{groups.grouped[area.id]?.length || 0}</span>
+              {/if}
+              <div class="folder-actions">
+                <button
+                  class="folder-btn"
+                  on:click|stopPropagation={() => {
+                    editingAreaId = area.id;
+                    editingAreaName = area.name;
+                  }}
+                  title="Rename">✎</button
+                >
+                <button
+                  class="folder-btn danger"
+                  on:click|stopPropagation={() => handleDeleteArea(area.id)}
+                  title="Delete folder">×</button
+                >
+              </div>
+            </div>
+            {#if !collapsedAreas[area.id]}
+              {#each groups.grouped[area.id] || [] as project (project.id)}
+                {@const si = statusIcon(project.status)}
+                <div class="tree-item-row">
+                  <button
+                    class="tree-item"
+                    draggable="true"
+                    on:dragstart={(e) => onDragStart(e, project.id)}
+                    on:dragend={onDragEnd}
+                    on:click={() => selectProject(project.id)}
+                    class:dimmed={project.status === 'on_hold' || project.status === 'deprecated'}
+                  >
+                    <span class="drag-handle">⠿</span>
+                    {#if si}<span class="status-icon">{si}</span>{/if}
+                    <span class="project-name">{project.work_name}</span>
+                    {#if project.tags?.length}<span class="mini-tags"
+                        >{#each project.tags.slice(0, 2) as tag}<span class="mini-tag">{tag}</span
+                          >{/each}</span
+                      >{/if}
+                    {#if project.star_rating}<span class="mini-stars"
+                        >{'\u2605'.repeat(project.star_rating)}</span
+                      >{/if}
+                  </button>
+                  <button
+                    class="action-trigger"
+                    on:click={(e) => toggleMenu(e, project.id)}
+                    title="Actions">⋯</button
+                  >
+                  {#if activeMenu === project.id}
+                    <div class="action-menu" role="presentation" on:click|stopPropagation>
+                      <button on:click={(e) => quickArchive(e, project.id)}>
+                        <svg viewBox="0 0 16 16" class="menu-icon"
+                          ><path d="M2 3h12v2H2zm1 3h10v7H3zm4 2v3h2V8z" fill="currentColor" /></svg
+                        >
+                        Archive
+                      </button>
+                      <button on:click={(e) => quickExport(e, project.id, project.work_name)}>
+                        <svg viewBox="0 0 16 16" class="menu-icon"
+                          ><path
+                            d="M8 2v7M5 6l3 3 3-3M3 11v2h10v-2"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          /></svg
+                        >
+                        Download ZIP
+                      </button>
+                      {#if project.status !== 'on_hold'}
+                        <button on:click={(e) => quickSetStatus(e, project.id, 'on_hold')}>
+                          <svg viewBox="0 0 16 16" class="menu-icon"
+                            ><rect
+                              x="4"
+                              y="3"
+                              width="3"
+                              height="10"
+                              rx="1"
+                              fill="currentColor"
+                            /><rect
+                              x="9"
+                              y="3"
+                              width="3"
+                              height="10"
+                              rx="1"
+                              fill="currentColor"
+                            /></svg
+                          >
+                          On Hold
+                        </button>
+                      {:else}
+                        <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
+                          <svg viewBox="0 0 16 16" class="menu-icon"
+                            ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
+                          >
+                          Reactivate
+                        </button>
+                      {/if}
+                      {#if project.status !== 'deprecated'}
+                        <button
+                          class="danger-action"
+                          on:click={(e) => quickSetStatus(e, project.id, 'deprecated')}
+                        >
+                          <svg viewBox="0 0 16 16" class="menu-icon"
+                            ><circle
+                              cx="8"
+                              cy="8"
+                              r="6"
+                              stroke="currentColor"
+                              stroke-width="1.5"
+                              fill="none"
+                            /><line
+                              x1="4"
+                              y1="4"
+                              x2="12"
+                              y2="12"
+                              stroke="currentColor"
+                              stroke-width="1.5"
+                            /></svg
+                          >
+                          Deprecated
+                        </button>
+                      {:else}
+                        <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
+                          <svg viewBox="0 0 16 16" class="menu-icon"
+                            ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
+                          >
+                          Reactivate
+                        </button>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+              {#if (groups.grouped[area.id]?.length || 0) === 0}
+                <p class="empty-folder">Drop projects here</p>
+              {/if}
+            {/if}
+          </div>
+        {/each}
+
+        <!-- Ungrouped -->
         <div
           class="tree-group"
           role="group"
           class:drop-target={dragProjectId}
           on:dragover={onDragOver}
-          on:drop={(e) => onDropToArea(e, area.id)}
+          on:drop={onDropToUngrouped}
         >
           <div class="tree-group-header">
-            <button class="folder-toggle" on:click={() => toggleArea(area.id)}
-              >{collapsedAreas[area.id] ? '▶' : '▼'}</button
-            >
-            {#if editingAreaId === area.id}
-              <input
-                class="rename-input"
-                type="text"
-                bind:value={editingAreaName}
-                on:keydown={(e) => {
-                  if (e.key === 'Enter') handleRenameArea(area.id);
-                  if (e.key === 'Escape') editingAreaId = null;
-                }}
-                on:blur={() => (editingAreaId = null)}
-              />
-            {:else}
-              <span class="folder-name">{area.name}</span>
-              <span class="folder-count">{groups.grouped[area.id]?.length || 0}</span>
-            {/if}
-            <div class="folder-actions">
-              <button
-                class="folder-btn"
-                on:click|stopPropagation={() => {
-                  editingAreaId = area.id;
-                  editingAreaName = area.name;
-                }}
-                title="Rename">✎</button
-              >
-              <button
-                class="folder-btn danger"
-                on:click|stopPropagation={() => handleDeleteArea(area.id)}
-                title="Delete folder">×</button
-              >
-            </div>
+            <span class="folder-name">Ungrouped</span>
+            <span class="folder-count">{groups.ungrouped.length}</span>
           </div>
-          {#if !collapsedAreas[area.id]}
-            {#each groups.grouped[area.id] || [] as project (project.id)}
-              {@const si = statusIcon(project.status)}
-              <div class="tree-item-row">
-                <button
-                  class="tree-item"
-                  draggable="true"
-                  on:dragstart={(e) => onDragStart(e, project.id)}
-                  on:dragend={onDragEnd}
-                  on:click={() => selectProject(project.id)}
-                  class:dimmed={project.status === 'on_hold' || project.status === 'deprecated'}
-                >
-                  <span class="drag-handle">⠿</span>
-                  {#if si}<span class="status-icon">{si}</span>{/if}
-                  <span class="project-name">{project.work_name}</span>
-                  {#if project.tags?.length}<span class="mini-tags"
-                      >{#each project.tags.slice(0, 2) as tag}<span class="mini-tag">{tag}</span
-                        >{/each}</span
-                    >{/if}
-                  {#if project.star_rating}<span class="mini-stars"
-                      >{'\u2605'.repeat(project.star_rating)}</span
-                    >{/if}
-                </button>
-                <button
-                  class="action-trigger"
-                  on:click={(e) => toggleMenu(e, project.id)}
-                  title="Actions">⋯</button
-                >
-                {#if activeMenu === project.id}
-                  <div class="action-menu" role="presentation" on:click|stopPropagation>
-                    <button on:click={(e) => quickArchive(e, project.id)}>
-                      <svg viewBox="0 0 16 16" class="menu-icon"
-                        ><path d="M2 3h12v2H2zm1 3h10v7H3zm4 2v3h2V8z" fill="currentColor" /></svg
-                      >
-                      Archive
-                    </button>
-                    <button on:click={(e) => quickExport(e, project.id, project.work_name)}>
-                      <svg viewBox="0 0 16 16" class="menu-icon"
-                        ><path
-                          d="M8 2v7M5 6l3 3 3-3M3 11v2h10v-2"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                          fill="none"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        /></svg
-                      >
-                      Download ZIP
-                    </button>
-                    {#if project.status !== 'on_hold'}
-                      <button on:click={(e) => quickSetStatus(e, project.id, 'on_hold')}>
-                        <svg viewBox="0 0 16 16" class="menu-icon"
-                          ><rect
-                            x="4"
-                            y="3"
-                            width="3"
-                            height="10"
-                            rx="1"
-                            fill="currentColor"
-                          /><rect
-                            x="9"
-                            y="3"
-                            width="3"
-                            height="10"
-                            rx="1"
-                            fill="currentColor"
-                          /></svg
-                        >
-                        On Hold
-                      </button>
-                    {:else}
-                      <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
-                        <svg viewBox="0 0 16 16" class="menu-icon"
-                          ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
-                        >
-                        Reactivate
-                      </button>
-                    {/if}
-                    {#if project.status !== 'deprecated'}
-                      <button
-                        class="danger-action"
-                        on:click={(e) => quickSetStatus(e, project.id, 'deprecated')}
-                      >
-                        <svg viewBox="0 0 16 16" class="menu-icon"
-                          ><circle
-                            cx="8"
-                            cy="8"
-                            r="6"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            fill="none"
-                          /><line
-                            x1="4"
-                            y1="4"
-                            x2="12"
-                            y2="12"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                          /></svg
-                        >
-                        Deprecated
-                      </button>
-                    {:else}
-                      <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
-                        <svg viewBox="0 0 16 16" class="menu-icon"
-                          ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
-                        >
-                        Reactivate
-                      </button>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-            {#if (groups.grouped[area.id]?.length || 0) === 0}
-              <p class="empty-folder">Drop projects here</p>
-            {/if}
-          {/if}
-        </div>
-      {/each}
-
-      <!-- Ungrouped -->
-      <div
-        class="tree-group"
-        role="group"
-        class:drop-target={dragProjectId}
-        on:dragover={onDragOver}
-        on:drop={onDropToUngrouped}
-      >
-        <div class="tree-group-header">
-          <span class="folder-name">Ungrouped</span>
-          <span class="folder-count">{groups.ungrouped.length}</span>
-        </div>
-        {#each groups.ungrouped as project (project.id)}
-          {@const si = statusIcon(project.status)}
-          <div class="tree-item-row">
-            <button
-              class="tree-item"
-              draggable="true"
-              on:dragstart={(e) => onDragStart(e, project.id)}
-              on:dragend={onDragEnd}
-              on:click={() => selectProject(project.id)}
-              class:dimmed={project.status === 'on_hold' || project.status === 'deprecated'}
-            >
-              <span class="drag-handle">⠿</span>
-              {#if si}<span class="status-icon">{si}</span>{/if}
-              <span class="project-name">{project.work_name}</span>
-              {#if project.star_rating}<span class="mini-stars"
-                  >{'\u2605'.repeat(project.star_rating)}</span
-                >{/if}
-            </button>
-            <button
-              class="action-trigger"
-              on:click={(e) => toggleMenu(e, project.id)}
-              title="Actions">⋯</button
-            >
-            {#if activeMenu === project.id}
-              <div class="action-menu" role="presentation" on:click|stopPropagation>
-                <button on:click={(e) => quickArchive(e, project.id)}>
-                  <svg viewBox="0 0 16 16" class="menu-icon"
-                    ><path d="M2 3h12v2H2zm1 3h10v7H3zm4 2v3h2V8z" fill="currentColor" /></svg
-                  >
-                  Archive
-                </button>
-                <button on:click={(e) => quickExport(e, project.id, project.work_name)}>
-                  <svg viewBox="0 0 16 16" class="menu-icon"
-                    ><path
-                      d="M8 2v7M5 6l3 3 3-3M3 11v2h10v-2"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      fill="none"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    /></svg
-                  >
-                  Download ZIP
-                </button>
-                {#if project.status !== 'on_hold'}
-                  <button on:click={(e) => quickSetStatus(e, project.id, 'on_hold')}>
+          {#each groups.ungrouped as project (project.id)}
+            {@const si = statusIcon(project.status)}
+            <div class="tree-item-row">
+              <button
+                class="tree-item"
+                draggable="true"
+                on:dragstart={(e) => onDragStart(e, project.id)}
+                on:dragend={onDragEnd}
+                on:click={() => selectProject(project.id)}
+                class:dimmed={project.status === 'on_hold' || project.status === 'deprecated'}
+              >
+                <span class="drag-handle">⠿</span>
+                {#if si}<span class="status-icon">{si}</span>{/if}
+                <span class="project-name">{project.work_name}</span>
+                {#if project.star_rating}<span class="mini-stars"
+                    >{'\u2605'.repeat(project.star_rating)}</span
+                  >{/if}
+              </button>
+              <button
+                class="action-trigger"
+                on:click={(e) => toggleMenu(e, project.id)}
+                title="Actions">⋯</button
+              >
+              {#if activeMenu === project.id}
+                <div class="action-menu" role="presentation" on:click|stopPropagation>
+                  <button on:click={(e) => quickArchive(e, project.id)}>
                     <svg viewBox="0 0 16 16" class="menu-icon"
-                      ><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor" /><rect
-                        x="9"
-                        y="3"
-                        width="3"
-                        height="10"
-                        rx="1"
-                        fill="currentColor"
-                      /></svg
+                      ><path d="M2 3h12v2H2zm1 3h10v7H3zm4 2v3h2V8z" fill="currentColor" /></svg
                     >
-                    On Hold
+                    Archive
                   </button>
-                {:else}
-                  <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
+                  <button on:click={(e) => quickExport(e, project.id, project.work_name)}>
                     <svg viewBox="0 0 16 16" class="menu-icon"
-                      ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
-                    >
-                    Reactivate
-                  </button>
-                {/if}
-                {#if project.status !== 'deprecated'}
-                  <button
-                    class="danger-action"
-                    on:click={(e) => quickSetStatus(e, project.id, 'deprecated')}
-                  >
-                    <svg viewBox="0 0 16 16" class="menu-icon"
-                      ><circle
-                        cx="8"
-                        cy="8"
-                        r="6"
+                      ><path
+                        d="M8 2v7M5 6l3 3 3-3M3 11v2h10v-2"
                         stroke="currentColor"
                         stroke-width="1.5"
                         fill="none"
-                      /><line
-                        x1="4"
-                        y1="4"
-                        x2="12"
-                        y2="12"
-                        stroke="currentColor"
-                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
                       /></svg
                     >
-                    Deprecated
+                    Download ZIP
                   </button>
-                {:else}
-                  <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
-                    <svg viewBox="0 0 16 16" class="menu-icon"
-                      ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
+                  {#if project.status !== 'on_hold'}
+                    <button on:click={(e) => quickSetStatus(e, project.id, 'on_hold')}>
+                      <svg viewBox="0 0 16 16" class="menu-icon"
+                        ><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor" /><rect
+                          x="9"
+                          y="3"
+                          width="3"
+                          height="10"
+                          rx="1"
+                          fill="currentColor"
+                        /></svg
+                      >
+                      On Hold
+                    </button>
+                  {:else}
+                    <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
+                      <svg viewBox="0 0 16 16" class="menu-icon"
+                        ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
+                      >
+                      Reactivate
+                    </button>
+                  {/if}
+                  {#if project.status !== 'deprecated'}
+                    <button
+                      class="danger-action"
+                      on:click={(e) => quickSetStatus(e, project.id, 'deprecated')}
                     >
-                    Reactivate
-                  </button>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/each}
+                      <svg viewBox="0 0 16 16" class="menu-icon"
+                        ><circle
+                          cx="8"
+                          cy="8"
+                          r="6"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          fill="none"
+                        /><line
+                          x1="4"
+                          y1="4"
+                          x2="12"
+                          y2="12"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                        /></svg
+                      >
+                      Deprecated
+                    </button>
+                  {:else}
+                    <button on:click={(e) => quickSetStatus(e, project.id, 'active')}>
+                      <svg viewBox="0 0 16 16" class="menu-icon"
+                        ><polygon points="4,2 14,8 4,14" fill="currentColor" /></svg
+                      >
+                      Reactivate
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+
+        {#if $projects.length === 0 && $areas.length === 0}
+          <p class="empty">{t('noProjects', $language)}</p>
+        {/if}
+      </nav>
+
+      <div class="sidebar-footer">
+        <label class="toggle-label">
+          <input type="checkbox" bind:checked={showArchived} on:change={doSearch} />
+          {t('archived', $language)}
+        </label>
       </div>
+    </aside>
 
-      {#if $projects.length === 0 && $areas.length === 0}
-        <p class="empty">{t('noProjects', $language)}</p>
-      {/if}
-    </nav>
-
-    <div class="sidebar-footer">
-      <label class="toggle-label">
-        <input type="checkbox" bind:checked={showArchived} on:change={doSearch} />
-        {t('archived', $language)}
-      </label>
-    </div>
-  </aside>
+    <!-- Outside the scrolling aside, so it spans the full height however far
+         the tree is scrolled. Double-click puts the width back. -->
+    <button
+      type="button"
+      class="resize-handle"
+      aria-label="Resize sidebar"
+      title="Drag to resize · double-click to reset"
+      on:pointerdown={startResize}
+      on:pointermove={moveResize}
+      on:pointerup={endResize}
+      on:pointercancel={endResize}
+      on:dblclick={resetWidth}
+      on:keydown={keyResize}
+    ></button>
+  </div>
 {:else}
   <button class="sidebar-toggle" on:click={() => sidebarOpen.set(true)}>☰</button>
 {/if}
 
 <style>
+  .sidebar-shell {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    height: 100vh;
+  }
   .sidebar {
     width: var(--sidebar-width);
     min-width: var(--sidebar-width);
@@ -633,6 +705,35 @@
     padding: 1rem;
     gap: 0.75rem;
     overflow-y: auto;
+    /* A long name or a pair of tags used to grow a horizontal scrollbar here.
+       Rows clip themselves now (see .tree-item); the panel never scrolls
+       sideways, and the handle is how you make room instead. */
+    overflow-x: hidden;
+  }
+  .sidebar-shell.resizing,
+  .sidebar-shell.resizing * {
+    user-select: none;
+    cursor: col-resize;
+  }
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    width: 6px;
+    height: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    cursor: col-resize;
+    z-index: 5;
+    transition: background var(--transition);
+  }
+  .resize-handle:hover,
+  .resize-handle:focus-visible,
+  .sidebar-shell.resizing .resize-handle {
+    background: var(--accent);
+    outline: none;
   }
   .sidebar-header {
     display: flex;
@@ -773,6 +874,11 @@
     align-items: center;
     gap: 0.3rem;
     flex: 1;
+    /* Flex children default to min-width:auto, which is what let the row grow
+       past the panel. With this, the row shrinks and its parts clip in order:
+       tags first, then the name to an ellipsis. */
+    min-width: 0;
+    overflow: hidden;
     text-align: left;
     padding: 0.35rem 0.5rem 0.35rem 1.2rem;
     border: none;
@@ -810,7 +916,8 @@
     flex-shrink: 0;
   }
   .project-name {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 4rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -818,7 +925,9 @@
   .mini-tags {
     display: flex;
     gap: 0.15rem;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
   }
   .mini-tag {
     font-size: 0.55rem;
