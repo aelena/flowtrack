@@ -137,8 +137,41 @@
       await updateProject(projectId, cleanEditData(editData));
       editing = false;
       await load();
+      showToast(t('saved', $language), 'success', 2000);
     } catch (e) {
       showToast(e.message);
+    }
+  }
+
+  function cancelEdit() {
+    editing = false;
+  }
+
+  // Only the project row, not files and clips: this runs on every task status
+  // click and the completion bar is the one thing that needs to move.
+  async function refreshProject() {
+    try {
+      project = await getProject(projectId);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  // --- Subjective completion, dragged rather than typed ---
+  // The bar on the overview is a range input dressed as a bar. The label
+  // follows the thumb while dragging; the server hears about it on release.
+  let subjectiveDraft = null;
+  $: subjectiveShown = subjectiveDraft ?? project?.subjective_completion ?? 0;
+
+  async function commitSubjective(e) {
+    const value = Number(e.target.value);
+    subjectiveDraft = null;
+    if (value === project.subjective_completion) return;
+    try {
+      project = await updateProject(projectId, { subjective_completion: value });
+      showToast(t('saved', $language), 'success', 1500);
+    } catch (err) {
+      showToast(err.message);
     }
   }
 
@@ -291,34 +324,42 @@
             {/if}
           </div>
           <div class="header-actions">
-            <button
-              on:click={handlePin}
-              class:pinned={project.pinned}
-              aria-pressed={project.pinned}
-              title={project.pinned ? t('unpin', $language) : t('pin', $language)}
-            >
-              <svg
-                viewBox="0 0 16 16"
-                width="12"
-                height="12"
-                aria-hidden="true"
-                style="vertical-align: -1px; margin-right: 4px;"
+            {#if editing}
+              <!-- Save and Cancel replace the row while editing. The form is
+                   long, and a Save that only exists below the fold is a Save
+                   nobody finds. -->
+              <button class="primary" on:click={save}>{t('save', $language)}</button>
+              <button on:click={cancelEdit}>{t('cancel', $language)}</button>
+            {:else}
+              <button
+                on:click={handlePin}
+                class:pinned={project.pinned}
+                aria-pressed={project.pinned}
+                title={project.pinned ? t('unpin', $language) : t('pin', $language)}
               >
-                <path
-                  d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  fill="none"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              {project.pinned ? t('unpin', $language) : t('pin', $language)}
-            </button>
-            <button on:click={startEdit}>Edit</button>
-            <button on:click={handleArchive}
-              >{project.archived ? 'Unarchive' : t('archive', $language)}</button
-            >
+                <svg
+                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  aria-hidden="true"
+                  style="vertical-align: -1px; margin-right: 4px;"
+                >
+                  <path
+                    d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                {project.pinned ? t('unpin', $language) : t('pin', $language)}
+              </button>
+              <button on:click={startEdit}>{t('edit', $language)}</button>
+              <button on:click={handleArchive}
+                >{project.archived ? 'Unarchive' : t('archive', $language)}</button
+              >
+            {/if}
           </div>
         </div>
 
@@ -374,13 +415,22 @@
           </div>
           <div class="progress-item">
             <span class="progress-label"
-              >{t('subjective', $language)}: {project.subjective_completion}%</span
+              >{t('subjective', $language)}: {subjectiveShown}%
+              <span class="progress-hint">· {t('dragToSet', $language)}</span></span
             >
-            <div class="progress-bar">
-              <div
-                class="fill subjective-fill"
-                style="width: {project.subjective_completion}%"
-              ></div>
+            <div class="progress-bar subjective-track">
+              <div class="fill subjective-fill" style="width: {subjectiveShown}%"></div>
+              <input
+                type="range"
+                class="subjective-range"
+                min="0"
+                max="100"
+                step="1"
+                value={subjectiveShown}
+                aria-label={t('subjective', $language)}
+                on:input={(e) => (subjectiveDraft = Number(e.target.value))}
+                on:change={commitSubjective}
+              />
             </div>
           </div>
         </div>
@@ -408,7 +458,7 @@
             }}>{t('chatMode', $language)}</button
           >
           {#if editing}
-            <span class="mode-editing">Editing</span>
+            <span class="mode-editing">{t('editing', $language)}</span>
           {/if}
         </div>
       </header>
@@ -452,7 +502,7 @@
           >
           <div class="form-actions">
             <button class="primary" on:click={save}>{t('save', $language)}</button>
-            <button on:click={() => (editing = false)}>{t('cancel', $language)}</button>
+            <button on:click={cancelEdit}>{t('cancel', $language)}</button>
           </div>
         </div>
       {:else if mode === 'overview'}
@@ -502,7 +552,7 @@
             </section>
           {/if}
 
-          <TaskList {projectId} />
+          <TaskList {projectId} on:change={refreshProject} />
           <NoteEditor {projectId} localDir={project.local_dir} />
           <CommandBar
             {projectId}
@@ -807,6 +857,76 @@
 
   .subjective-fill {
     background: #e89b3e;
+  }
+  .progress-hint {
+    color: var(--text-muted);
+    font-weight: 400;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .progress-item:hover .progress-hint {
+    opacity: 1;
+  }
+  /* The range input sits on top of the painted bar, invisible except for its
+     thumb, so the bar keeps looking like the one next to it but takes a drag. */
+  .subjective-track {
+    position: relative;
+    overflow: visible;
+    cursor: ew-resize;
+  }
+  .subjective-range {
+    position: absolute;
+    inset: -6px 0;
+    width: 100%;
+    height: calc(100% + 12px);
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: ew-resize;
+  }
+  .subjective-range::-webkit-slider-runnable-track {
+    background: transparent;
+  }
+  .subjective-range::-moz-range-track {
+    background: transparent;
+  }
+  .subjective-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e89b3e;
+    border: 2px solid var(--bg-secondary);
+    box-shadow: 0 0 0 1px #e89b3e;
+    margin-top: 3px;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .subjective-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e89b3e;
+    border: 2px solid var(--bg-secondary);
+    box-shadow: 0 0 0 1px #e89b3e;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .subjective-track:hover .subjective-range::-webkit-slider-thumb,
+  .subjective-range:focus-visible::-webkit-slider-thumb,
+  .subjective-range:active::-webkit-slider-thumb {
+    opacity: 1;
+  }
+  .subjective-track:hover .subjective-range::-moz-range-thumb,
+  .subjective-range:focus-visible::-moz-range-thumb,
+  .subjective-range:active::-moz-range-thumb {
+    opacity: 1;
+  }
+  .subjective-range:focus-visible {
+    outline: none;
   }
 
   .project-details section {

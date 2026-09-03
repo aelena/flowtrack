@@ -1,4 +1,5 @@
 <script>
+  import { createEventDispatcher } from 'svelte';
   import { language, showToast } from '../stores.js';
   import { listTasks, updateTask, deleteTask } from '../api.js';
   import { t } from '../i18n.js';
@@ -8,6 +9,10 @@
 
   let tasks = [];
   let showAddModal = false;
+
+  // The project's completion percentage is computed from these tasks but lives
+  // on the parent, which has no other way of knowing a status just changed.
+  const dispatch = createEventDispatcher();
 
   async function load() {
     if (!projectId) return;
@@ -23,6 +28,7 @@
     try {
       await updateTask(projectId, task.id, { status: next[task.status] });
       await load();
+      dispatch('change');
     } catch (e) {
       showToast(e.message);
     }
@@ -32,6 +38,7 @@
     try {
       await deleteTask(projectId, taskId);
       await load();
+      dispatch('change');
     } catch (e) {
       showToast(e.message);
     }
@@ -72,7 +79,7 @@
     {projectId}
     on:close={() => {
       showAddModal = false;
-      load();
+      load().then(() => dispatch('change'));
     }}
   />
 {/if}
