@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -58,6 +58,7 @@ def _project_to_dict(p):
         "local_dir": p.local_dir,
         "area_id": str(p.area_id) if p.area_id else None,
         "archived": p.archived,
+        "pinned": bool(p.pinned),
         "status": p.status.value if p.status else "active",
         "tags": p.tags or [],
         "collaborators": p.collaborators or [],
@@ -88,22 +89,49 @@ def _project_to_dict(p):
 
 
 @router.get("/export")
-async def export_all(db: AsyncSession = Depends(get_db)):
-    """Export all areas, projects (with tasks, notes), and snippets as JSON."""
-    areas_result = await db.execute(select(Area).order_by(Area.name))
+async def export_all(
+    project_ids: list[UUID] | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export areas, projects (with tasks, notes), and snippets as JSON.
+
+    With no ``project_ids`` this is a full backup. With some, it is a partial
+    one: only those projects, their snippets, and the areas they belong to, in
+    the same shape, so the same import reads both. Unknown ids are reported
+    under ``scope.missing`` rather than silently dropped, because a backup that
+    quietly lacks a project is the kind that is discovered too late.
+    """
+    project_query = (
+        select(Project)
+        .options(selectinload(Project.tasks).selectinload(Task.notes), selectinload(Project.notes))
+        .order_by(Project.created_at)
+    )
+    snippet_query = select(Snippet).order_by(Snippet.created_at)
+
+    if project_ids is not None:
+        wanted = set(project_ids)
+        project_query = project_query.where(Project.id.in_(wanted))
+        snippet_query = snippet_query.where(Snippet.project_id.in_(wanted))
+
+    project_rows = (await db.execute(project_query)).scalars().all()
+
+    area_query = select(Area).order_by(Area.name)
+    missing: list[str] = []
+    if project_ids is not None:
+        found = {p.id for p in project_rows}
+        missing = [str(i) for i in project_ids if i not in found]
+        used_area_ids = {p.area_id for p in project_rows if p.area_id}
+        area_query = area_query.where(Area.id.in_(used_area_ids))
+
+    areas_result = await db.execute(area_query)
     areas = [
         {"id": str(a.id), "name": a.name, "created_at": a.created_at.isoformat() if a.created_at else None}
         for a in areas_result.scalars().all()
     ]
 
-    projects_result = await db.execute(
-        select(Project)
-        .options(selectinload(Project.tasks).selectinload(Task.notes), selectinload(Project.notes))
-        .order_by(Project.created_at)
-    )
-    projects = [_project_to_dict(p) for p in projects_result.scalars().all()]
+    projects = [_project_to_dict(p) for p in project_rows]
 
-    snippets_result = await db.execute(select(Snippet).order_by(Snippet.created_at))
+    snippets_result = await db.execute(snippet_query)
     snippets = [
         {
             "id": str(s.id),
@@ -116,13 +144,16 @@ async def export_all(db: AsyncSession = Depends(get_db)):
         for s in snippets_result.scalars().all()
     ]
 
-    return {
+    payload = {
         "version": "1.0",
         "exported_at": datetime.now(UTC).isoformat(),
         "areas": areas,
         "projects": projects,
         "snippets": snippets,
     }
+    if project_ids is not None:
+        payload["scope"] = {"requested": [str(i) for i in project_ids], "missing": missing}
+    return payload
 
 
 @router.post("/import")
@@ -190,6 +221,7 @@ async def import_all(data: dict = Body(...), db: AsyncSession = Depends(get_db))
                 local_dir=p_data.get("local_dir"),
                 area_id=_safe_uuid(p_data.get("area_id")),
                 archived=p_data.get("archived", False),
+                pinned=bool(p_data.get("pinned", False)),
                 status=status_enum,
                 tags=p_data.get("tags", []),
                 collaborators=p_data.get("collaborators", []),

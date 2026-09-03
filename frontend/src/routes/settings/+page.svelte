@@ -8,6 +8,7 @@
     resetConfig,
     exportBackup,
     importBackup,
+    listProjects,
     getLock,
     setLockPassword,
     removeLockPassword,
@@ -173,17 +174,88 @@
     apiKey.set(e.target.value);
   }
 
-  async function handleExportBackup() {
+  // --- Export scope ---
+  // 'all' is the backup everyone wants most of the time. 'selected' exists for
+  // handing one or two projects to another machine, or for keeping a copy of
+  // something before you archive it, without dragging the whole portfolio along.
+  let exportScope = 'all';
+  let exportable = [];
+  let exportableLoaded = false;
+  let exportFilter = '';
+  let chosen = new Set();
+
+  async function loadExportable() {
+    if (exportableLoaded) return;
     try {
-      const data = await exportBackup();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = tsFilename('flowtrack-backup', 'json');
-      a.click();
-      URL.revokeObjectURL(url);
-      importStatus = 'Backup exported successfully';
+      // Archived projects are the ones you most want in a backup, so both lists.
+      const [live, archived] = await Promise.all([
+        listProjects({ archived: false, sort_by: 'work_name', sort_order: 'asc' }),
+        listProjects({ archived: true, sort_by: 'work_name', sort_order: 'asc' }),
+      ]);
+      exportable = [...live, ...archived];
+      exportableLoaded = true;
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  $: if (exportScope === 'selected') loadExportable();
+
+  const projectLabel = (p) => p.final_name || p.work_name || '';
+
+  $: visibleExportable = exportFilter.trim()
+    ? exportable.filter((p) =>
+        [p.work_name, p.final_name, ...(p.tags || [])]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(exportFilter.trim().toLowerCase())
+      )
+    : exportable;
+
+  function toggleChosen(id) {
+    const next = new Set(chosen);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    chosen = next;
+  }
+
+  function chooseVisible() {
+    chosen = new Set([...chosen, ...visibleExportable.map((p) => p.id)]);
+  }
+
+  function chooseNone() {
+    chosen = new Set();
+  }
+
+  function download(data, base) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = tsFilename(base, 'json');
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExportBackup() {
+    const selected = exportScope === 'selected';
+    if (selected && chosen.size === 0) {
+      importStatus = t('nothingSelected', $language);
+      importStatusType = 'error';
+      setTimeout(() => (importStatus = ''), 3000);
+      return;
+    }
+    try {
+      const data = await exportBackup(selected ? [...chosen] : null);
+      download(data, selected ? 'flowtrack-projects' : 'flowtrack-backup');
+      const n = data.projects.length;
+      importStatus = selected
+        ? `Exported ${n} project${n === 1 ? '' : 's'}`
+        : 'Backup exported successfully';
+      if (data.scope?.missing?.length) {
+        importStatus += ` — ${data.scope.missing.length} no longer exist and were left out`;
+      }
       importStatusType = 'success';
     } catch (e) {
       importStatus = 'Export failed: ' + e.message;
@@ -364,8 +436,64 @@
       Export all project data (areas, projects, tasks, notes, snippets) as a JSON file for backup or
       transfer. File attachments are not included — use the per-project ZIP export for that.
     </p>
+    <div class="scope-switch" role="radiogroup" aria-label="Export scope">
+      <label class:active={exportScope === 'all'}>
+        <input type="radio" name="export-scope" value="all" bind:group={exportScope} />
+        {t('exportScopeAll', $language)}
+      </label>
+      <label class:active={exportScope === 'selected'}>
+        <input type="radio" name="export-scope" value="selected" bind:group={exportScope} />
+        {t('exportScopeSelected', $language)}
+      </label>
+    </div>
+
+    {#if exportScope === 'selected'}
+      <div class="picker">
+        <div class="picker-tools">
+          <input
+            type="search"
+            bind:value={exportFilter}
+            placeholder={t('filterProjects', $language)}
+            aria-label={t('filterProjects', $language)}
+          />
+          <button type="button" class="link" on:click={chooseVisible}
+            >{t('selectAll', $language)}</button
+          >
+          <button type="button" class="link" on:click={chooseNone}
+            >{t('selectNone', $language)}</button
+          >
+          <span class="picker-count">{chosen.size} {t('selectedCount', $language)}</span>
+        </div>
+        {#if !exportableLoaded}
+          <p class="picker-empty">Loading...</p>
+        {:else if visibleExportable.length === 0}
+          <p class="picker-empty">{t('noMatches', $language)}</p>
+        {:else}
+          <ul class="picker-list">
+            {#each visibleExportable as p (p.id)}
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={chosen.has(p.id)}
+                    on:change={() => toggleChosen(p.id)}
+                  />
+                  <span class="picker-name">{projectLabel(p)}</span>
+                  {#if p.archived}<span class="picker-tag">{t('archived', $language)}</span>{/if}
+                </label>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    {/if}
+
     <div class="backup-actions">
-      <button class="primary" on:click={handleExportBackup}>
+      <button
+        class="primary"
+        on:click={handleExportBackup}
+        disabled={exportScope === 'selected' && chosen.size === 0}
+      >
         <svg
           viewBox="0 0 16 16"
           width="14"
@@ -381,7 +509,9 @@
             stroke-linejoin="round"
           />
         </svg>
-        Export All Data (JSON)
+        {exportScope === 'selected'
+          ? `${t('exportSelected', $language)}${chosen.size ? ` · ${chosen.size}` : ''}`
+          : t('exportAll', $language)}
       </button>
       <label class="import-label">
         <svg
@@ -552,6 +682,106 @@ cli:
     font-size: 0.85rem;
   }
 
+  .scope-switch {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+  }
+  .scope-switch label {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+  }
+  .scope-switch label + label {
+    border-left: 1px solid var(--border);
+  }
+  .scope-switch label.active {
+    color: var(--text);
+    background: var(--bg);
+    font-weight: 600;
+  }
+  .scope-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .picker {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 0.75rem;
+    background: var(--bg-secondary);
+  }
+  .picker-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .picker-tools input {
+    flex: 1;
+    min-width: 8rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .picker-tools .link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.8rem;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .picker-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .picker-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.25rem 0;
+    max-height: 16rem;
+    overflow-y: auto;
+  }
+  .picker-list label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .picker-list label:hover {
+    background: var(--bg);
+  }
+  .picker-name {
+    flex: 1;
+  }
+  .picker-tag {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+  .picker-empty {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .backup-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   .backup-actions {
     display: flex;
     gap: 0.75rem;

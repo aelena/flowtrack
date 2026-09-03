@@ -179,6 +179,32 @@ async def unarchive_project(project_id: UUID, db: AsyncSession = Depends(get_db)
     return await _set_archived(project_id, False, db)
 
 
+async def _set_pinned(project_id: UUID, pinned: bool, db: AsyncSession) -> ProjectOut:
+    result = await db.execute(
+        select(Project).options(selectinload(Project.tasks)).where(Project.id == project_id)
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    project.pinned = pinned
+    await db.commit()
+    await db.refresh(project)
+    out = ProjectOut.model_validate(project)
+    out.task_completion = compute_task_completion(project.tasks)
+    return out
+
+
+@router.post("/{project_id}/pin", response_model=ProjectOut)
+async def pin_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Keep the project on the home page whatever its activity says."""
+    return await _set_pinned(project_id, True, db)
+
+
+@router.post("/{project_id}/unpin", response_model=ProjectOut)
+async def unpin_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
+    return await _set_pinned(project_id, False, db)
+
+
 @router.get("/{project_id}/export")
 async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(

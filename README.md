@@ -68,6 +68,8 @@ Copy `.env.example` to `.env` and adjust:
 - Grouping by **Areas** (folders) with drag-and-drop between areas
 - Project status: **active**, **on hold**, **deprecated**
 - Archive without deletion
+- Pin to the home page, GitHub-style: pinned projects sit above the recent ones and stay there whatever their activity
+- Home page shows 6, 12, 24 or all recent projects (remembered per browser)
 - Sidebar quick actions per project (archive, ZIP download, on hold, deprecated)
 
 ### Tasks
@@ -102,6 +104,7 @@ Copy `.env.example` to `.env` and adjust:
 
 ### Backup & Restore (`/settings`)
 - **Export**: download all project data as a single JSON file (areas, projects, tasks, notes, snippets — no file attachments)
+- **Export selected**: pick some projects (archived ones included) and download only those, their snippets and the areas they use, in the same file shape, so the same import reads both
 - **Import**: upload a JSON backup to merge into the database (skips existing records by ID)
 - Useful for backup, migration, or transferring data between instances
 
@@ -250,6 +253,9 @@ All endpoints require `X-API-Key` header.
 | GET/POST | `/api/projects/` | List/create projects (query: search, area_id, sort_by, sort_order, archived) |
 | GET/PUT | `/api/projects/{id}` | Get/update project |
 | POST | `/api/projects/{id}/archive` | Archive project |
+| POST | `/api/projects/{id}/unarchive` | Bring a project back out of the archive |
+| POST | `/api/projects/{id}/pin` | Pin to the home page |
+| POST | `/api/projects/{id}/unpin` | Unpin |
 | POST | `/api/projects/{id}/export` | Export as ZIP (with files) |
 | GET | `/api/projects/{id}/pending` | Pending tasks summary |
 | POST | `/api/projects/{id}/collaborators` | Add collaborator |
@@ -281,7 +287,7 @@ All endpoints require `X-API-Key` header.
 | GET/PUT | `/api/config/yaml` | Get/update config as YAML |
 | POST | `/api/config/reset` | Reset config to defaults |
 | **Backup** | | |
-| GET | `/api/backup/export` | Export all data as JSON |
+| GET | `/api/backup/export` | Export all data as JSON; repeat `project_ids=` to export only those projects |
 | POST | `/api/backup/import` | Import data from JSON |
 
 ## Running Tests

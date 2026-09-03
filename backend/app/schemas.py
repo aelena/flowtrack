@@ -61,6 +61,7 @@ class ProjectUpdate(BaseModel):
     status: ProjectStatus | None = None
     tags: list[str] | None = None
     collaborators: list | None = None
+    pinned: bool | None = None
 
 
 class ProjectOut(BaseModel):
@@ -80,6 +81,7 @@ class ProjectOut(BaseModel):
     local_dir: str | None
     area_id: UUID | None
     archived: bool
+    pinned: bool = False
     status: ProjectStatus
     tags: list[str]
     collaborators: list
@@ -95,6 +97,7 @@ class ProjectListOut(BaseModel):
     final_name: str | None
     area_id: UUID | None
     archived: bool
+    pinned: bool = False
     status: ProjectStatus
     tags: list[str]
     star_rating: int | None

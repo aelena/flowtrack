@@ -1,7 +1,13 @@
 <script>
   import { onMount } from 'svelte';
-  import { homeView, language } from '$lib/stores.js';
-  import { listProjects, getThroughput } from '$lib/api.js';
+  import {
+    homeView,
+    homeRecentCount,
+    HOME_RECENT_CHOICES,
+    language,
+    showToast,
+  } from '$lib/stores.js';
+  import { listProjects, getThroughput, setProjectPinned } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
   import { daysSince, projectHealth, shortDate } from '$lib/utils.js';
 
@@ -50,6 +56,24 @@
   }
 
   const name = (p) => p.final_name || p.work_name || '';
+
+  // Optimistic: flip the row, ask the server, and put it back if the server
+  // disagrees. A pin is too small an action to deserve a spinner.
+  async function togglePin(project) {
+    const next = !project.pinned;
+    rows = rows.map((p) => (p.id === project.id ? { ...p, pinned: next } : p));
+    try {
+      await setProjectPinned(project.id, next);
+    } catch (e) {
+      rows = rows.map((p) => (p.id === project.id ? { ...p, pinned: !next } : p));
+      showToast(e.message);
+    }
+  }
+
+  function setRecentCount(e) {
+    const v = e.target.value;
+    homeRecentCount.set(v === 'all' ? 'all' : Number(v));
+  }
 
   // --- table state ---------------------------------------------------------
   let query = '';
@@ -134,7 +158,11 @@
   // Filtering can strand the reader on a page that no longer exists.
   $: if (page > pageCount - 1) page = pageCount - 1;
   $: pageRows = sorted.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
-  $: recent = rows.slice(0, 6);
+  $: pinned = rows.filter((p) => p.pinned);
+  // Recent excludes what is already pinned, so a project never appears twice on
+  // the same screen.
+  $: unpinned = rows.filter((p) => !p.pinned);
+  $: recent = $homeRecentCount === 'all' ? unpinned : unpinned.slice(0, $homeRecentCount);
 
   function activityLabel(iso) {
     const d = daysSince(iso);
@@ -203,6 +231,16 @@
       {t('allProjects', lang)}
       {#if rows.length}<span class="count">{rows.length}</span>{/if}
     </button>
+    {#if $homeView === 'recent' && rows.length > 0}
+      <label class="show-count">
+        <span class="muted small">{t('showCount', lang)}</span>
+        <select value={String($homeRecentCount)} on:change={setRecentCount}>
+          {#each HOME_RECENT_CHOICES as n}
+            <option value={String(n)}>{n === 'all' ? t('showAll', lang) : n}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
   </div>
 
   {#if loading}
@@ -212,28 +250,36 @@
   {:else if rows.length === 0}
     <p class="muted">{t('noProjects', lang)}</p>
   {:else if $homeView === 'recent'}
-    <div class="project-grid">
-      {#each recent as project (project.id)}
-        <a href="/projects/{project.id}" class="project-card">
-          <h3>{name(project)}</h3>
-          <div class="card-meta">
-            {#if project.star_rating}
-              <span class="stars"
-                >{'★'.repeat(project.star_rating)}{'☆'.repeat(5 - project.star_rating)}</span
-              >
-            {/if}
-            <div class="progress-bar" style="margin-top: 0.5rem;">
-              <div class="fill" style="width: {project.task_completion}%"></div>
-            </div>
-            <span class="completion-text">
-              {project.task_completion}% complete
-              <span class="dot">·</span>
-              {activityLabel(project.last_activity_at)}
-            </span>
-          </div>
-        </a>
-      {/each}
-    </div>
+    {#if pinned.length > 0}
+      <h2 class="section-title">
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="pin-glyph">
+          <path
+            d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+            stroke="currentColor"
+            stroke-width="1.5"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        {t('pinned', lang)}
+      </h2>
+      <div class="project-grid pinned-grid">
+        {#each pinned as project (project.id)}
+          {@render card(project)}
+        {/each}
+      </div>
+      <h2 class="section-title">{t('recentProjects', lang)}</h2>
+    {/if}
+    {#if recent.length === 0 && pinned.length > 0}
+      <p class="muted small">{t('noMatches', lang)}</p>
+    {:else}
+      <div class="project-grid">
+        {#each recent as project (project.id)}
+          {@render card(project)}
+        {/each}
+      </div>
+    {/if}
   {:else}
     <div class="table-tools">
       <input
@@ -283,7 +329,29 @@
                     role="img"
                   ></span>
                 </td>
-                <td><a href="/projects/{p.id}">{name(p)}</a></td>
+                <td class="name-cell">
+                  <button
+                    type="button"
+                    class="pin-btn pin-btn--inline"
+                    class:pinned={p.pinned}
+                    title={p.pinned ? t('unpin', lang) : t('pin', lang)}
+                    aria-label={p.pinned ? t('unpin', lang) : t('pin', lang)}
+                    aria-pressed={p.pinned}
+                    on:click={() => togglePin(p)}
+                  >
+                    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                      <path
+                        d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        fill="none"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <a href="/projects/{p.id}">{name(p)}</a>
+                </td>
                 <td><span class="status status--{p.status}">{p.status}</span></td>
                 <td class="stars">
                   {p.star_rating ? '★'.repeat(p.star_rating) : ''}
@@ -318,6 +386,51 @@
     {/if}
   {/if}
 </div>
+
+{#snippet card(project)}
+  <!-- The link and the pin are siblings, not nested: a button inside an anchor
+       is invalid HTML and the browsers disagree about which one gets the click. -->
+  <div class="card-wrap">
+    <a href="/projects/{project.id}" class="project-card">
+      <h3>{name(project)}</h3>
+      <div class="card-meta">
+        {#if project.star_rating}
+          <span class="stars"
+            >{'★'.repeat(project.star_rating)}{'☆'.repeat(5 - project.star_rating)}</span
+          >
+        {/if}
+        <div class="progress-bar" style="margin-top: 0.5rem;">
+          <div class="fill" style="width: {project.task_completion}%"></div>
+        </div>
+        <span class="completion-text">
+          {project.task_completion}% complete
+          <span class="dot">·</span>
+          {activityLabel(project.last_activity_at)}
+        </span>
+      </div>
+    </a>
+    <button
+      type="button"
+      class="pin-btn pin-btn--card"
+      class:pinned={project.pinned}
+      title={project.pinned ? t('unpin', lang) : t('pin', lang)}
+      aria-label={project.pinned ? t('unpin', lang) : t('pin', lang)}
+      aria-pressed={project.pinned}
+      on:click={() => togglePin(project)}
+    >
+      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+        <path
+          d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+          stroke="currentColor"
+          stroke-width="1.5"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+  </div>
+{/snippet}
 
 <style>
   .home {
@@ -372,6 +485,102 @@
     font-weight: 400;
     font-size: 0.75rem;
     color: var(--text-muted);
+  }
+
+  .show-count {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-bottom: 0.3rem;
+  }
+
+  .show-count select {
+    font-size: 0.8rem;
+    padding: 0.15rem 0.35rem;
+    background: var(--bg-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin: 0 0 0.6rem;
+  }
+
+  .pinned-grid {
+    margin-bottom: 1.5rem;
+  }
+
+  .pin-glyph {
+    color: var(--accent);
+  }
+
+  .card-wrap {
+    position: relative;
+  }
+
+  .card-wrap .project-card {
+    height: 100%;
+  }
+
+  .pin-btn {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    line-height: 0;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .pin-btn:hover {
+    color: var(--accent);
+    background: var(--bg);
+  }
+
+  .pin-btn.pinned {
+    color: var(--accent);
+  }
+
+  /* Quiet until hovered or already set: an unpinned card should not carry a
+     control on it, only an affordance when you reach for one. */
+  .pin-btn--card {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+
+  .card-wrap:hover .pin-btn--card,
+  .pin-btn--card:focus-visible,
+  .pin-btn--card.pinned {
+    opacity: 1;
+  }
+
+  .card-wrap .project-card h3 {
+    padding-right: 1.5rem;
+  }
+
+  .pin-btn--inline {
+    vertical-align: middle;
+    margin-right: 0.3rem;
+    opacity: 0.35;
+  }
+
+  tbody tr:hover .pin-btn--inline,
+  .pin-btn--inline.pinned,
+  .pin-btn--inline:focus-visible {
+    opacity: 1;
   }
 
   .muted {

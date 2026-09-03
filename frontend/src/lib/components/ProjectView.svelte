@@ -4,6 +4,7 @@
     getProject,
     updateProject,
     setProjectArchived,
+    setProjectPinned,
     listFiles,
     uploadFile,
     deleteFile,
@@ -168,6 +169,15 @@
     }
   }
 
+  async function handlePin() {
+    try {
+      await setProjectPinned(projectId, !project.pinned);
+      await load();
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
   async function handleArchive() {
     try {
       // The button already offered "Unarchive" for archived projects but always
@@ -281,6 +291,30 @@
             {/if}
           </div>
           <div class="header-actions">
+            <button
+              on:click={handlePin}
+              class:pinned={project.pinned}
+              aria-pressed={project.pinned}
+              title={project.pinned ? t('unpin', $language) : t('pin', $language)}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                width="12"
+                height="12"
+                aria-hidden="true"
+                style="vertical-align: -1px; margin-right: 4px;"
+              >
+                <path
+                  d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              {project.pinned ? t('unpin', $language) : t('pin', $language)}
+            </button>
             <button on:click={startEdit}>Edit</button>
             <button on:click={handleArchive}
               >{project.archived ? 'Unarchive' : t('archive', $language)}</button
@@ -673,6 +707,10 @@
     display: flex;
     gap: 0.5rem;
     flex-shrink: 0;
+  }
+  .header-actions button.pinned {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .tag-row {
     display: flex;

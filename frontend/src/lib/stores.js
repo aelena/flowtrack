@@ -47,9 +47,14 @@ export const theme = persisted('theme', 'light');
 export const language = persisted('language', 'en');
 export const font = persisted('font', 'Segoe UI');
 export const sidebarOpen = persisted('sidebarOpen', true);
-// Which face of the home page: the six most recently touched projects, or the
+// Which face of the home page: the most recently touched projects, or the
 // full sortable table. Remembered, because it is a working preference.
 export const homeView = persisted('homeView', 'recent');
+// How many recent cards the home page shows. Six was a hard-coded guess that
+// suited a small portfolio; a bigger one wants more, and 'all' is a valid
+// answer. Pinned projects are shown on top and do not count against this.
+export const homeRecentCount = persisted('homeRecentCount', 6);
+export const HOME_RECENT_CHOICES = [6, 12, 24, 'all'];
 export const apiKey = persisted('apiKey', 'ft_dev_key_change_me');
 // The host-side launcher. Empty disables the feature entirely, and the note
 // buttons fall back to putting the command on the clipboard.

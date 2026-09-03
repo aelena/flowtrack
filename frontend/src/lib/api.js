@@ -58,6 +58,9 @@ export const archiveProject = (id) => request('POST', `/api/projects/${id}/archi
 export const unarchiveProject = (id) => request('POST', `/api/projects/${id}/unarchive`);
 export const setProjectArchived = (id, archived) =>
   archived ? archiveProject(id) : unarchiveProject(id);
+export const pinProject = (id) => request('POST', `/api/projects/${id}/pin`);
+export const unpinProject = (id) => request('POST', `/api/projects/${id}/unpin`);
+export const setProjectPinned = (id, pinned) => (pinned ? pinProject(id) : unpinProject(id));
 export const exportProject = async (id) => {
   const resp = await fetch(`${BASE_URL}/api/projects/${id}/export`, {
     method: 'GET',
@@ -153,5 +156,12 @@ export const setLockOnOpen = (lockOnOpen) =>
   request('PUT', '/api/config/lock/settings', { lock_on_open: lockOnOpen });
 
 // Backup
-export const exportBackup = () => request('GET', '/api/backup/export');
+// No ids: everything. Some ids: only those projects, their snippets and the
+// areas they use, in the same file shape, so the same import reads both.
+export const exportBackup = (projectIds = null) => {
+  if (!projectIds) return request('GET', '/api/backup/export');
+  const qs = new URLSearchParams();
+  projectIds.forEach((id) => qs.append('project_ids', id));
+  return request('GET', `/api/backup/export?${qs.toString()}`);
+};
 export const importBackup = (data) => request('POST', '/api/backup/import', data);

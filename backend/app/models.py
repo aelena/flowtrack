@@ -55,6 +55,10 @@ class Project(Base):
     local_dir = Column(String(500), nullable=True)
     area_id = Column(UUID(as_uuid=True), ForeignKey("areas.id", ondelete="SET NULL"), nullable=True)
     archived = Column(Boolean, default=False)
+    # Kept on the home page regardless of activity, the way GitHub pins repos to
+    # a profile. Stored on the row rather than in the browser so it survives a
+    # new machine and travels with a backup.
+    pinned = Column(Boolean, default=False, nullable=False, server_default="false")
     status = Column(SAEnum(ProjectStatus), default=ProjectStatus.active)
     tags = Column(JSONB, default=list)
     collaborators = Column(JSONB, default=list)
