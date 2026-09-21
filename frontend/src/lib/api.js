@@ -77,7 +77,8 @@ export const addCollaborator = (id, collab) =>
   request('POST', `/api/projects/${id}/collaborators`, collab);
 
 // Tasks
-export const listTasks = (projectId) => request('GET', `/api/projects/${projectId}/tasks/`);
+export const listTasks = (projectId, status = null) =>
+  request('GET', `/api/projects/${projectId}/tasks/${status ? '?status=' + status : ''}`);
 export const createTasks = (projectId, content, description = null) =>
   request('POST', `/api/projects/${projectId}/tasks/`, { content, description });
 export const updateTask = (projectId, taskId, data) =>
@@ -124,6 +125,18 @@ export const uploadFile = async (projectId, file, folder = null) => {
 };
 export const deleteFile = (projectId, fileId) =>
   request('DELETE', `/api/projects/${projectId}/files/${fileId}`);
+// The download route sits behind the API key like everything else, so a plain
+// <a href> cannot reach it. Fetch the bytes and let the caller hand them over.
+export const downloadFile = async (projectId, fileId) => {
+  const resp = await fetch(`${BASE_URL}/api/projects/${projectId}/files/${fileId}/download`, {
+    headers: { 'X-API-Key': get(apiKey) },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => null);
+    throw new Error(extractDetail(err, 'Download failed'));
+  }
+  return resp.blob();
+};
 
 // LLM
 export const generatePRD = (id) => request('POST', `/api/documents/prd/${id}`);

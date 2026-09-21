@@ -231,6 +231,7 @@ async def export_project(project_id: UUID, db: AsyncSession = Depends(get_db)):
             "goal": project.goal,
             "completion_criteria": project.completion_criteria,
             "abandonment_criteria": project.abandonment_criteria,
+            "premortem": project.premortem,
             "desired_end_date": str(project.desired_end_date) if project.desired_end_date else None,
             "github_repo": project.github_repo,
             "website": project.website,

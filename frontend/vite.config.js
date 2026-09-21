@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
@@ -14,9 +16,11 @@ export default defineConfig({
     // trips on a cold cache reports the machine, not the code.
     testTimeout: 20000,
     // stores.js imports `browser` from $app/environment, which only resolves
-    // inside a SvelteKit build. Point it at a stub for unit tests.
+    // inside a SvelteKit build. Point it at a stub for unit tests. fileURLToPath,
+    // not URL.pathname: on Windows the latter keeps a leading slash and percent-
+    // encodes a space in the checkout path, and Vite then cannot find the stub.
     alias: {
-      '$app/environment': new URL('./src/test/app-environment.js', import.meta.url).pathname,
+      '$app/environment': fileURLToPath(new URL('./src/test/app-environment.js', import.meta.url)),
     },
   },
 });

@@ -360,3 +360,31 @@ async def test_full_export_has_no_scope_and_keeps_pinned(client):
     assert resp.status_code == 200
     resp = await client.get(f"/api/projects/{exported['id']}", headers=HEADERS)
     assert resp.json()["pinned"] is True
+
+
+@pytest.mark.asyncio
+async def test_premortem_survives_export_and_import(client):
+    """A backup that drops the pre-mortem loses the one document written while
+    it could still be honest. Export carries it; import puts it back."""
+    resp = await client.post(
+        "/api/projects/",
+        json={"work_name": "Premortem Proj", "premortem": "Fails if nobody uses it by June."},
+        headers=HEADERS,
+    )
+    pid = resp.json()["id"]
+
+    resp = await client.get(f"/api/backup/export?project_ids={pid}", headers=HEADERS)
+    exported = resp.json()["projects"][0]
+    assert exported["premortem"] == "Fails if nobody uses it by June."
+
+    # Re-import under a fresh id so the merge does not skip it as already present.
+    exported["id"] = "f10a1b2c-0099-4000-8000-000000000099"
+    exported["tasks"] = []
+    exported["notes"] = []
+    resp = await client.post(
+        "/api/backup/import", json={"areas": [], "projects": [exported], "snippets": []}, headers=HEADERS
+    )
+    assert resp.status_code == 200
+
+    resp = await client.get(f"/api/projects/{exported['id']}", headers=HEADERS)
+    assert resp.json()["premortem"] == "Fails if nobody uses it by June."

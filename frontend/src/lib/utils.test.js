@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  PREMORTEM_FOLDER,
+  TASK_FILTERS,
   clipPreview,
   daysSince,
+  filterTasks,
   isInbox,
   projectHealth,
   safeExternalUrl,
   shortDate,
+  taskCounts,
   tsFilename,
 } from './utils.js';
 
@@ -216,5 +220,70 @@ describe('isInbox / the clip inbox is not judged as a project', () => {
   it('still judges a normal project on the same data', () => {
     const ancient = new Date('2020-01-01').toISOString();
     expect(projectHealth({ work_name: 'Real', last_activity_at: ancient }).level).toBe('bad');
+  });
+});
+
+describe('filterTasks', () => {
+  const tasks = [
+    { id: 1, status: 'new' },
+    { id: 2, status: 'in_progress' },
+    { id: 3, status: 'done' },
+    { id: 4, status: 'done' },
+  ];
+
+  it('returns everything for "all", and for no filter at all', () => {
+    expect(filterTasks(tasks, 'all')).toEqual(tasks);
+    expect(filterTasks(tasks, undefined)).toEqual(tasks);
+    expect(filterTasks(tasks, '')).toEqual(tasks);
+  });
+
+  it('keeps only the tasks in the chosen status, in their original order', () => {
+    expect(filterTasks(tasks, 'done').map((t) => t.id)).toEqual([3, 4]);
+    expect(filterTasks(tasks, 'in_progress').map((t) => t.id)).toEqual([2]);
+    expect(filterTasks(tasks, 'new').map((t) => t.id)).toEqual([1]);
+  });
+
+  it('is an empty list for a status nothing is in, and for bad input', () => {
+    expect(filterTasks([], 'done')).toEqual([]);
+    expect(filterTasks(null, 'done')).toEqual([]);
+    expect(filterTasks(tasks, 'finished')).toEqual([]);
+  });
+
+  it('offers exactly the three statuses plus "all", with "all" first', () => {
+    expect(TASK_FILTERS).toEqual(['all', 'new', 'in_progress', 'done']);
+  });
+});
+
+describe('taskCounts', () => {
+  it('counts each status and the total', () => {
+    const counts = taskCounts([
+      { status: 'new' },
+      { status: 'done' },
+      { status: 'done' },
+      { status: 'in_progress' },
+    ]);
+    expect(counts).toEqual({ all: 4, new: 1, in_progress: 1, done: 2 });
+  });
+
+  it('is all zeros with nothing to count', () => {
+    expect(taskCounts([])).toEqual({ all: 0, new: 0, in_progress: 0, done: 0 });
+    expect(taskCounts(undefined)).toEqual({ all: 0, new: 0, in_progress: 0, done: 0 });
+  });
+
+  it('counts an unknown status towards the total only', () => {
+    // A status the UI does not know must not vanish from "all", or the chips
+    // would add up to less than the list.
+    expect(taskCounts([{ status: 'blocked' }, { status: 'all' }])).toEqual({
+      all: 2,
+      new: 0,
+      in_progress: 0,
+      done: 0,
+    });
+  });
+});
+
+describe('PREMORTEM_FOLDER', () => {
+  it('is a plain folder name the upload sanitiser will accept unchanged', () => {
+    expect(PREMORTEM_FOLDER).toMatch(/^[a-z]+$/);
   });
 });

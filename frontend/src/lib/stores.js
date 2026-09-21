@@ -61,6 +61,10 @@ export const homeView = persisted('homeView', 'recent');
 // answer. Pinned projects are shown on top and do not count against this.
 export const homeRecentCount = persisted('homeRecentCount', 6);
 export const HOME_RECENT_CHOICES = [6, 12, 24, 'all'];
+// Which slice of a project's task list is showing: all, new, in_progress or
+// done. One preference for every project rather than one per project, because
+// "what is still open" is asked the same way everywhere.
+export const taskFilter = persisted('taskFilter', 'all');
 export const apiKey = persisted('apiKey', 'ft_dev_key_change_me');
 // The host-side launcher. Empty disables the feature entirely, and the note
 // buttons fall back to putting the command on the clipboard.

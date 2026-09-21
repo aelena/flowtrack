@@ -135,3 +135,30 @@ export function clipPreview(content, max = 240) {
   const collapsed = content.replace(/\s+/g, ' ').trim();
   return collapsed.length > max ? collapsed.slice(0, max).trimEnd() + '…' : collapsed;
 }
+
+// --- Task filters ----------------------------------------------------------
+//
+// The task list shows everything or a single status. 'all' is not a status the
+// API knows; it is the absence of a filter, and it is the default.
+export const TASK_FILTERS = ['all', 'new', 'in_progress', 'done'];
+
+export function filterTasks(tasks, filter) {
+  if (!Array.isArray(tasks)) return [];
+  if (!filter || filter === 'all') return tasks;
+  return tasks.filter((t) => t.status === filter);
+}
+
+// One number per chip, so the filter bar says how much is behind each choice
+// before it is clicked. Unknown statuses count towards 'all' and nothing else.
+export function taskCounts(tasks) {
+  const counts = { all: 0, new: 0, in_progress: 0, done: 0 };
+  for (const t of Array.isArray(tasks) ? tasks : []) {
+    counts.all += 1;
+    if (t.status !== 'all' && Object.hasOwn(counts, t.status)) counts[t.status] += 1;
+  }
+  return counts;
+}
+
+// Pre-mortem documents are ordinary uploads kept in this folder, so they show
+// in the file tree like everything else and next to the pre-mortem text.
+export const PREMORTEM_FOLDER = 'premortem';

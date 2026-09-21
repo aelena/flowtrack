@@ -31,6 +31,7 @@ class ProjectCreate(BaseModel):
     goal: str | None = None
     completion_criteria: str | None = None
     abandonment_criteria: str | None = None
+    premortem: str | None = None
     desired_end_date: date | None = None
     github_repo: str | None = None
     website: str | None = None
@@ -51,6 +52,7 @@ class ProjectUpdate(BaseModel):
     goal: str | None = None
     completion_criteria: str | None = None
     abandonment_criteria: str | None = None
+    premortem: str | None = None
     desired_end_date: date | None = None
     github_repo: str | None = None
     website: str | None = None
@@ -73,6 +75,7 @@ class ProjectOut(BaseModel):
     goal: str | None
     completion_criteria: str | None
     abandonment_criteria: str | None
+    premortem: str | None = None
     desired_end_date: date | None
     github_repo: str | None
     website: str | None

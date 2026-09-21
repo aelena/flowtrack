@@ -36,6 +36,7 @@ async def _get_project_context(project_id: UUID, db: AsyncSession) -> dict:
         "vision": project.vision,
         "goal": project.goal,
         "completion_criteria": project.completion_criteria,
+        "premortem": project.premortem,
         "tasks": [{"title": t.title, "status": t.status.value} for t in project.tasks],
         "notes": [n.content for n in project.notes],
     }
@@ -50,6 +51,8 @@ async def generate_prd(project_id: UUID, db: AsyncSession = Depends(get_db)):
         "vision": ctx["vision"] or "",
         "goals": ctx["goal"] or "",
         "success_criteria": ctx["completion_criteria"] or "",
+        # The pre-mortem is the risk register nobody had to be asked to write.
+        "risks": ctx["premortem"] or "",
         "features": [t["title"] for t in ctx["tasks"]],
         "notes": ctx["notes"],
         "status": {

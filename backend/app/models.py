@@ -47,6 +47,12 @@ class Project(Base):
     goal = Column(Text, nullable=True)
     completion_criteria = Column(Text, nullable=True)
     abandonment_criteria = Column(Text, nullable=True)
+    # The pre-mortem, written before the work starts: imagine the project has
+    # failed and say why. abandonment_criteria says when to stop; this says what
+    # is most likely to make that happen, while it can still be said honestly.
+    # Inline markdown. Longer documents go through the files panel, under the
+    # "premortem" folder, and the UI shows them next to this text.
+    premortem = Column(Text, nullable=True)
     desired_end_date = Column(Date, nullable=True)
     github_repo = Column(String(500), nullable=True)
     website = Column(String(500), nullable=True)

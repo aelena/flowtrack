@@ -2,7 +2,7 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,8 +56,20 @@ def _apply_status(task: Task, status: TaskStatus) -> None:
 
 
 @router.get("/", response_model=list[TaskOut])
-async def list_tasks(project_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task).where(Task.project_id == project_id).order_by(Task.created_at))
+async def list_tasks(
+    project_id: UUID,
+    status: TaskStatus | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """The project's tasks, oldest first, optionally only those in one status.
+
+    The filter is typed with the enum, so an unknown value is a 422 naming the
+    three that exist rather than an empty list that looks like an answer.
+    """
+    query = select(Task).where(Task.project_id == project_id)
+    if status is not None:
+        query = query.where(Task.status == status)
+    result = await db.execute(query.order_by(Task.created_at))
     return result.scalars().all()
 
 

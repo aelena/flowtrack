@@ -8,12 +8,14 @@
     listFiles,
     uploadFile,
     deleteFile,
+    downloadFile,
     listSnippets,
     deleteSnippet,
     moveSnippet,
     listProjects,
   } from '../api.js';
-  import { clipPreview, safeExternalUrl, shortDate } from '../utils.js';
+  import { PREMORTEM_FOLDER, clipPreview, safeExternalUrl, shortDate } from '../utils.js';
+  import { renderMarkdown } from '../markdown.js';
   import { t } from '../i18n.js';
   import TaskList from './TaskList.svelte';
   import NoteEditor from './NoteEditor.svelte';
@@ -120,6 +122,7 @@
       'goal',
       'completion_criteria',
       'abandonment_criteria',
+      'premortem',
       'desired_end_date',
       'github_repo',
       'website',
@@ -184,6 +187,7 @@
       goal: project.goal || '',
       completion_criteria: project.completion_criteria || '',
       abandonment_criteria: project.abandonment_criteria || '',
+      premortem: project.premortem || '',
       desired_end_date: project.desired_end_date || '',
       github_repo: project.github_repo || '',
       website: project.website || '',
@@ -249,6 +253,58 @@
     }
   }
 
+  // --- Pre-mortem ---
+  // The text lives on the project row and is edited in place, without opening
+  // the whole edit form: it is meant to be reread and amended, not filled in
+  // once. Documents are ordinary uploads in PREMORTEM_FOLDER, so they also
+  // appear in the file tree on the right.
+  let editingPremortem = false;
+  let premortemDraft = '';
+  let premortemInput;
+
+  function startPremortem() {
+    premortemDraft = project.premortem || '';
+    editingPremortem = true;
+  }
+
+  async function savePremortem() {
+    try {
+      project = await updateProject(projectId, { premortem: premortemDraft.trim() || null });
+      editingPremortem = false;
+      showToast(t('saved', $language), 'success', 1500);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  async function handlePremortemUpload(e) {
+    const selected = e.target.files;
+    if (!selected?.length) return;
+    try {
+      for (const file of selected) {
+        await uploadFile(projectId, file, PREMORTEM_FOLDER);
+      }
+      premortemInput.value = '';
+      await loadFiles();
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+
+  async function handleDownload(file) {
+    try {
+      const blob = await downloadFile(projectId, file.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
   // File tree actions
   async function handleFileUpload(e) {
     const selected = e.target.files;
@@ -299,6 +355,7 @@
 
   $: if (projectId) load();
   $: groupedFiles = groupFilesByFolder(files);
+  $: premortemFiles = files.filter((f) => f.folder === PREMORTEM_FOLDER);
   $: fileFolderNames = Object.keys(groupedFiles).sort((a, b) => {
     if (a === '') return 1;
     if (b === '') return -1;
@@ -487,6 +544,14 @@
             ></textarea></label
           >
           <label
+            >{t('premortem', $language)}
+            <textarea
+              bind:value={editData.premortem}
+              rows="6"
+              placeholder={t('premortemPrompt', $language)}
+            ></textarea></label
+          >
+          <label
             >Desired End Date <input type="date" bind:value={editData.desired_end_date} /></label
           >
           <label>GitHub Repo <input type="text" bind:value={editData.github_repo} /></label>
@@ -551,6 +616,72 @@
                 .join(', ')}
             </section>
           {/if}
+
+          <section class="premortem">
+            <div class="premortem-header">
+              <h3>{t('premortem', $language)}</h3>
+              <div class="premortem-actions">
+                {#if !editingPremortem}
+                  <button on:click={startPremortem}
+                    >{project.premortem
+                      ? t('edit', $language)
+                      : t('premortemWrite', $language)}</button
+                  >
+                {/if}
+                <label class="attach-label">
+                  {t('premortemAttach', $language)}
+                  <input
+                    type="file"
+                    multiple
+                    bind:this={premortemInput}
+                    on:change={handlePremortemUpload}
+                    hidden
+                  />
+                </label>
+              </div>
+            </div>
+
+            {#if editingPremortem}
+              <textarea
+                class="premortem-editor"
+                bind:value={premortemDraft}
+                rows="8"
+                placeholder={t('premortemPrompt', $language)}
+              ></textarea>
+              <div class="form-actions">
+                <button class="primary" on:click={savePremortem}>{t('save', $language)}</button>
+                <button on:click={() => (editingPremortem = false)}>{t('cancel', $language)}</button
+                >
+              </div>
+            {:else if project.premortem}
+              <!-- renderMarkdown() escapes its input before adding its own tags. -->
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <div class="premortem-body">{@html renderMarkdown(project.premortem)}</div>
+            {:else}
+              <p class="premortem-empty">{t('premortemEmpty', $language)}</p>
+            {/if}
+
+            {#if premortemFiles.length}
+              <ul class="premortem-docs">
+                {#each premortemFiles as file (file.id)}
+                  <li>
+                    <span class="file-icon">{fileIcon(file.file_type)}</span>
+                    <button
+                      class="doc-link"
+                      on:click={() => handleDownload(file)}
+                      title={t('download', $language)}>{file.filename}</button
+                    >
+                    <span class="file-tree-type">{file.file_type}</span>
+                    <button
+                      class="file-tree-action"
+                      on:click={() => handleFileDelete(file.id)}
+                      title="Remove">×</button
+                    >
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
 
           <TaskList {projectId} on:change={refreshProject} />
           <NoteEditor {projectId} localDir={project.local_dir} />
@@ -972,6 +1103,100 @@
     color: var(--text-muted);
   }
 
+  /* Pre-mortem: the one section with a frame, because it is the one that is
+     supposed to be uncomfortable to leave empty. */
+  .premortem {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    background: var(--bg-secondary);
+  }
+  .premortem-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .premortem-header h3 {
+    margin: 0;
+  }
+  .premortem-actions {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  .premortem-actions button,
+  .attach-label,
+  .premortem .form-actions button {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+  }
+  .attach-label {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--text-secondary);
+    background: var(--bg);
+  }
+  .attach-label:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .premortem-editor {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .premortem-body {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .premortem-body :global(code) {
+    background: var(--bg-tertiary);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+  .premortem-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+    margin: 0;
+  }
+  .premortem-docs {
+    list-style: none;
+    padding: 0;
+    margin: 0.6rem 0 0;
+    border-top: 1px dashed var(--border);
+  }
+  .premortem-docs li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0;
+    font-size: 0.8rem;
+  }
+  .doc-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    cursor: pointer;
+    text-align: left;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .doc-link:hover {
+    text-decoration: underline;
+  }
   /* Right file panel */
   .file-panel {
     width: 260px;

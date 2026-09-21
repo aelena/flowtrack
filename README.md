@@ -61,6 +61,7 @@ Copy `.env.example` to `.env` and adjust:
 ### Projects
 - Work-in-progress and tentative final names
 - Description, vision, goal, completion/abandonment criteria
+- Pre-mortem: written before the work starts, imagining the project has failed and saying why. Inline markdown on the project, plus attached documents under a `premortem` folder. Exported with backups, quoted by `/reckoning`
 - Star rating (1-5), subjective completion %, task-based completion %
 - GitHub repo and website links
 - Local directory reference
@@ -74,6 +75,7 @@ Copy `.env.example` to `.env` and adjust:
 
 ### Tasks
 - Three statuses: new, in progress, done (click to cycle)
+- Filter the list by status (all, pending, in progress, done), with a count on each; the API takes `?status=` for the same thing
 - Bulk creation from bullet or ordered lists
 - Notes can be attached to tasks
 
