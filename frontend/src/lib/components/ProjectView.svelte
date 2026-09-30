@@ -4,10 +4,18 @@
     getProject,
     updateProject,
     setProjectArchived,
+    setProjectPinned,
     listFiles,
     uploadFile,
     deleteFile,
+    downloadFile,
+    listSnippets,
+    deleteSnippet,
+    moveSnippet,
+    listProjects,
   } from '../api.js';
+  import { PREMORTEM_FOLDER, clipPreview, safeExternalUrl, shortDate } from '../utils.js';
+  import { renderMarkdown } from '../markdown.js';
   import { t } from '../i18n.js';
   import TaskList from './TaskList.svelte';
   import NoteEditor from './NoteEditor.svelte';
@@ -28,6 +36,11 @@
   let fileInput;
   let collapsedFileFolders = {};
 
+  // Clips from the Chrome clipper
+  let snippets = [];
+  let expandedClips = {};
+  let moveTargets = [];
+
   // Tag editing
   let newTag = '';
   let showTagInput = false;
@@ -38,6 +51,8 @@
       project = await getProject(projectId);
       writeContent = project.description || '';
       await loadFiles();
+      await loadSnippets();
+      await loadMoveTargets();
     } catch (e) {
       showToast(e.message);
     }
@@ -52,6 +67,52 @@
     }
   }
 
+  async function loadSnippets() {
+    if (!projectId) return;
+    try {
+      snippets = await listSnippets({ project_id: projectId });
+    } catch {
+      snippets = [];
+    }
+  }
+
+  // Only loaded when there is something to re-file, so the ordinary project
+  // page does not pay for a second request.
+  async function loadMoveTargets() {
+    if (moveTargets.length || !snippets.length) return;
+    try {
+      const all = await listProjects({ archived: false });
+      moveTargets = all.filter((p) => p.id !== projectId);
+    } catch {
+      moveTargets = [];
+    }
+  }
+
+  async function handleClipMove(id, targetId) {
+    if (!targetId) return;
+    try {
+      await moveSnippet(id, targetId);
+      snippets = snippets.filter((s) => s.id !== id);
+      showToast('Clip re-filed');
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  async function handleClipDelete(id) {
+    if (!confirm('Delete this clip?')) return;
+    try {
+      await deleteSnippet(id);
+      snippets = snippets.filter((s) => s.id !== id);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  function toggleClip(id) {
+    expandedClips = { ...expandedClips, [id]: !expandedClips[id] };
+  }
+
   // Convert empty strings to null for nullable fields
   function cleanEditData(data) {
     const nullable = [
@@ -61,6 +122,7 @@
       'goal',
       'completion_criteria',
       'abandonment_criteria',
+      'premortem',
       'desired_end_date',
       'github_repo',
       'website',
@@ -78,8 +140,41 @@
       await updateProject(projectId, cleanEditData(editData));
       editing = false;
       await load();
+      showToast(t('saved', $language), 'success', 2000);
     } catch (e) {
       showToast(e.message);
+    }
+  }
+
+  function cancelEdit() {
+    editing = false;
+  }
+
+  // Only the project row, not files and clips: this runs on every task status
+  // click and the completion bar is the one thing that needs to move.
+  async function refreshProject() {
+    try {
+      project = await getProject(projectId);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  // --- Subjective completion, dragged rather than typed ---
+  // The bar on the overview is a range input dressed as a bar. The label
+  // follows the thumb while dragging; the server hears about it on release.
+  let subjectiveDraft = null;
+  $: subjectiveShown = subjectiveDraft ?? project?.subjective_completion ?? 0;
+
+  async function commitSubjective(e) {
+    const value = Number(e.target.value);
+    subjectiveDraft = null;
+    if (value === project.subjective_completion) return;
+    try {
+      project = await updateProject(projectId, { subjective_completion: value });
+      showToast(t('saved', $language), 'success', 1500);
+    } catch (err) {
+      showToast(err.message);
     }
   }
 
@@ -92,6 +187,7 @@
       goal: project.goal || '',
       completion_criteria: project.completion_criteria || '',
       abandonment_criteria: project.abandonment_criteria || '',
+      premortem: project.premortem || '',
       desired_end_date: project.desired_end_date || '',
       github_repo: project.github_repo || '',
       website: project.website || '',
@@ -104,6 +200,15 @@
   async function setRating(n) {
     try {
       await updateProject(projectId, { star_rating: n });
+      await load();
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  async function handlePin() {
+    try {
+      await setProjectPinned(projectId, !project.pinned);
       await load();
     } catch (e) {
       showToast(e.message);
@@ -143,6 +248,58 @@
       const tags = (project.tags || []).filter((t) => t !== tag);
       await updateProject(projectId, { tags });
       await load();
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  // --- Pre-mortem ---
+  // The text lives on the project row and is edited in place, without opening
+  // the whole edit form: it is meant to be reread and amended, not filled in
+  // once. Documents are ordinary uploads in PREMORTEM_FOLDER, so they also
+  // appear in the file tree on the right.
+  let editingPremortem = false;
+  let premortemDraft = '';
+  let premortemInput;
+
+  function startPremortem() {
+    premortemDraft = project.premortem || '';
+    editingPremortem = true;
+  }
+
+  async function savePremortem() {
+    try {
+      project = await updateProject(projectId, { premortem: premortemDraft.trim() || null });
+      editingPremortem = false;
+      showToast(t('saved', $language), 'success', 1500);
+    } catch (e) {
+      showToast(e.message);
+    }
+  }
+
+  async function handlePremortemUpload(e) {
+    const selected = e.target.files;
+    if (!selected?.length) return;
+    try {
+      for (const file of selected) {
+        await uploadFile(projectId, file, PREMORTEM_FOLDER);
+      }
+      premortemInput.value = '';
+      await loadFiles();
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+
+  async function handleDownload(file) {
+    try {
+      const blob = await downloadFile(projectId, file.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.filename;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
       showToast(e.message);
     }
@@ -198,6 +355,7 @@
 
   $: if (projectId) load();
   $: groupedFiles = groupFilesByFolder(files);
+  $: premortemFiles = files.filter((f) => f.folder === PREMORTEM_FOLDER);
   $: fileFolderNames = Object.keys(groupedFiles).sort((a, b) => {
     if (a === '') return 1;
     if (b === '') return -1;
@@ -223,10 +381,42 @@
             {/if}
           </div>
           <div class="header-actions">
-            <button on:click={startEdit}>Edit</button>
-            <button on:click={handleArchive}
-              >{project.archived ? 'Unarchive' : t('archive', $language)}</button
-            >
+            {#if editing}
+              <!-- Save and Cancel replace the row while editing. The form is
+                   long, and a Save that only exists below the fold is a Save
+                   nobody finds. -->
+              <button class="primary" on:click={save}>{t('save', $language)}</button>
+              <button on:click={cancelEdit}>{t('cancel', $language)}</button>
+            {:else}
+              <button
+                on:click={handlePin}
+                class:pinned={project.pinned}
+                aria-pressed={project.pinned}
+                title={project.pinned ? t('unpin', $language) : t('pin', $language)}
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  aria-hidden="true"
+                  style="vertical-align: -1px; margin-right: 4px;"
+                >
+                  <path
+                    d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                {project.pinned ? t('unpin', $language) : t('pin', $language)}
+              </button>
+              <button on:click={startEdit}>{t('edit', $language)}</button>
+              <button on:click={handleArchive}
+                >{project.archived ? 'Unarchive' : t('archive', $language)}</button
+              >
+            {/if}
           </div>
         </div>
 
@@ -282,13 +472,22 @@
           </div>
           <div class="progress-item">
             <span class="progress-label"
-              >{t('subjective', $language)}: {project.subjective_completion}%</span
+              >{t('subjective', $language)}: {subjectiveShown}%
+              <span class="progress-hint">· {t('dragToSet', $language)}</span></span
             >
-            <div class="progress-bar">
-              <div
-                class="fill subjective-fill"
-                style="width: {project.subjective_completion}%"
-              ></div>
+            <div class="progress-bar subjective-track">
+              <div class="fill subjective-fill" style="width: {subjectiveShown}%"></div>
+              <input
+                type="range"
+                class="subjective-range"
+                min="0"
+                max="100"
+                step="1"
+                value={subjectiveShown}
+                aria-label={t('subjective', $language)}
+                on:input={(e) => (subjectiveDraft = Number(e.target.value))}
+                on:change={commitSubjective}
+              />
             </div>
           </div>
         </div>
@@ -316,7 +515,7 @@
             }}>{t('chatMode', $language)}</button
           >
           {#if editing}
-            <span class="mode-editing">Editing</span>
+            <span class="mode-editing">{t('editing', $language)}</span>
           {/if}
         </div>
       </header>
@@ -345,6 +544,14 @@
             ></textarea></label
           >
           <label
+            >{t('premortem', $language)}
+            <textarea
+              bind:value={editData.premortem}
+              rows="6"
+              placeholder={t('premortemPrompt', $language)}
+            ></textarea></label
+          >
+          <label
             >Desired End Date <input type="date" bind:value={editData.desired_end_date} /></label
           >
           <label>GitHub Repo <input type="text" bind:value={editData.github_repo} /></label>
@@ -360,7 +567,7 @@
           >
           <div class="form-actions">
             <button class="primary" on:click={save}>{t('save', $language)}</button>
-            <button on:click={() => (editing = false)}>{t('cancel', $language)}</button>
+            <button on:click={cancelEdit}>{t('cancel', $language)}</button>
           </div>
         </div>
       {:else if mode === 'overview'}
@@ -410,7 +617,73 @@
             </section>
           {/if}
 
-          <TaskList {projectId} />
+          <section class="premortem">
+            <div class="premortem-header">
+              <h3>{t('premortem', $language)}</h3>
+              <div class="premortem-actions">
+                {#if !editingPremortem}
+                  <button on:click={startPremortem}
+                    >{project.premortem
+                      ? t('edit', $language)
+                      : t('premortemWrite', $language)}</button
+                  >
+                {/if}
+                <label class="attach-label">
+                  {t('premortemAttach', $language)}
+                  <input
+                    type="file"
+                    multiple
+                    bind:this={premortemInput}
+                    on:change={handlePremortemUpload}
+                    hidden
+                  />
+                </label>
+              </div>
+            </div>
+
+            {#if editingPremortem}
+              <textarea
+                class="premortem-editor"
+                bind:value={premortemDraft}
+                rows="8"
+                placeholder={t('premortemPrompt', $language)}
+              ></textarea>
+              <div class="form-actions">
+                <button class="primary" on:click={savePremortem}>{t('save', $language)}</button>
+                <button on:click={() => (editingPremortem = false)}>{t('cancel', $language)}</button
+                >
+              </div>
+            {:else if project.premortem}
+              <!-- renderMarkdown() escapes its input before adding its own tags. -->
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <div class="premortem-body">{@html renderMarkdown(project.premortem)}</div>
+            {:else}
+              <p class="premortem-empty">{t('premortemEmpty', $language)}</p>
+            {/if}
+
+            {#if premortemFiles.length}
+              <ul class="premortem-docs">
+                {#each premortemFiles as file (file.id)}
+                  <li>
+                    <span class="file-icon">{fileIcon(file.file_type)}</span>
+                    <button
+                      class="doc-link"
+                      on:click={() => handleDownload(file)}
+                      title={t('download', $language)}>{file.filename}</button
+                    >
+                    <span class="file-tree-type">{file.file_type}</span>
+                    <button
+                      class="file-tree-action"
+                      on:click={() => handleFileDelete(file.id)}
+                      title="Remove">×</button
+                    >
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
+
+          <TaskList {projectId} on:change={refreshProject} />
           <NoteEditor {projectId} localDir={project.local_dir} />
           <CommandBar
             {projectId}
@@ -487,6 +760,73 @@
           {/each}
         {/if}
       </div>
+
+      <div class="clip-panel-header">
+        <h3>{t('clips', $language)}</h3>
+        {#if snippets.length}
+          <span class="clip-count">{snippets.length}</span>
+        {/if}
+      </div>
+
+      <div class="clip-list">
+        {#if snippets.length === 0}
+          <p class="file-empty">
+            No clips yet. Use the FlowTrack Clipper extension to save a page or a passage here.
+          </p>
+        {:else}
+          {#each snippets as clip (clip.id)}
+            {@const href = safeExternalUrl(clip.source_url)}
+            {@const expanded = expandedClips[clip.id]}
+            <div class="clip">
+              <div class="clip-top">
+                <span class="clip-type">{clip.snippet_type === 'url' ? 'link' : 'text'}</span>
+                <span class="clip-date">{shortDate(clip.created_at)}</span>
+                <button
+                  class="file-tree-action"
+                  on:click={() => handleClipDelete(clip.id)}
+                  title="Delete clip">×</button
+                >
+              </div>
+
+              <!-- Plain interpolation, never {@html}: this text came from an
+                   arbitrary web page through the clipper. -->
+              <p class="clip-body" class:expanded>
+                {expanded ? clip.content : clipPreview(clip.content)}
+              </p>
+
+              {#if clip.content.length > 240}
+                <button class="clip-more" on:click={() => toggleClip(clip.id)}>
+                  {expanded ? 'Show less' : 'Show more'}
+                </button>
+              {/if}
+
+              <select
+                class="clip-move"
+                on:change={(e) => {
+                  handleClipMove(clip.id, e.currentTarget.value);
+                  e.currentTarget.value = '';
+                }}
+              >
+                <option value="">Re-file to…</option>
+                {#each moveTargets as target}
+                  <option value={target.id}>{target.work_name}</option>
+                {/each}
+              </select>
+
+              {#if href}
+                <a class="clip-source" {href} target="_blank" rel="noopener noreferrer nofollow">
+                  {new URL(href).hostname}
+                </a>
+              {:else if clip.source_url}
+                <!-- Not http(s), so it is shown inert rather than made clickable. -->
+                <span class="clip-source unsafe" title="Not a linkable address"
+                  >{clip.source_url}</span
+                >
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </div>
     </aside>
   </div>
 {:else}
@@ -548,6 +888,10 @@
     display: flex;
     gap: 0.5rem;
     flex-shrink: 0;
+  }
+  .header-actions button.pinned {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .tag-row {
     display: flex;
@@ -645,6 +989,76 @@
   .subjective-fill {
     background: #e89b3e;
   }
+  .progress-hint {
+    color: var(--text-muted);
+    font-weight: 400;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .progress-item:hover .progress-hint {
+    opacity: 1;
+  }
+  /* The range input sits on top of the painted bar, invisible except for its
+     thumb, so the bar keeps looking like the one next to it but takes a drag. */
+  .subjective-track {
+    position: relative;
+    overflow: visible;
+    cursor: ew-resize;
+  }
+  .subjective-range {
+    position: absolute;
+    inset: -6px 0;
+    width: 100%;
+    height: calc(100% + 12px);
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: ew-resize;
+  }
+  .subjective-range::-webkit-slider-runnable-track {
+    background: transparent;
+  }
+  .subjective-range::-moz-range-track {
+    background: transparent;
+  }
+  .subjective-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e89b3e;
+    border: 2px solid var(--bg-secondary);
+    box-shadow: 0 0 0 1px #e89b3e;
+    margin-top: 3px;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .subjective-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e89b3e;
+    border: 2px solid var(--bg-secondary);
+    box-shadow: 0 0 0 1px #e89b3e;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .subjective-track:hover .subjective-range::-webkit-slider-thumb,
+  .subjective-range:focus-visible::-webkit-slider-thumb,
+  .subjective-range:active::-webkit-slider-thumb {
+    opacity: 1;
+  }
+  .subjective-track:hover .subjective-range::-moz-range-thumb,
+  .subjective-range:focus-visible::-moz-range-thumb,
+  .subjective-range:active::-moz-range-thumb {
+    opacity: 1;
+  }
+  .subjective-range:focus-visible {
+    outline: none;
+  }
 
   .project-details section {
     margin-bottom: 0.75rem;
@@ -689,6 +1103,100 @@
     color: var(--text-muted);
   }
 
+  /* Pre-mortem: the one section with a frame, because it is the one that is
+     supposed to be uncomfortable to leave empty. */
+  .premortem {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    background: var(--bg-secondary);
+  }
+  .premortem-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .premortem-header h3 {
+    margin: 0;
+  }
+  .premortem-actions {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  .premortem-actions button,
+  .attach-label,
+  .premortem .form-actions button {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+  }
+  .attach-label {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--text-secondary);
+    background: var(--bg);
+  }
+  .attach-label:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .premortem-editor {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .premortem-body {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .premortem-body :global(code) {
+    background: var(--bg-tertiary);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+  .premortem-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+    margin: 0;
+  }
+  .premortem-docs {
+    list-style: none;
+    padding: 0;
+    margin: 0.6rem 0 0;
+    border-top: 1px dashed var(--border);
+  }
+  .premortem-docs li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0;
+    font-size: 0.8rem;
+  }
+  .doc-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    cursor: pointer;
+    text-align: left;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .doc-link:hover {
+    text-decoration: underline;
+  }
   /* Right file panel */
   .file-panel {
     width: 260px;
@@ -854,5 +1362,100 @@
   }
   .file-tree-action:hover {
     color: var(--danger);
+  }
+
+  /* Clips — what the Chrome clipper writes into a project */
+  .clip-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0.75rem 0.25rem;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+  }
+  .clip-panel-header h3 {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .clip-count {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0 0.35rem;
+  }
+  .clip-list {
+    padding: 0 0.75rem 0.75rem;
+    overflow-y: auto;
+  }
+  .clip {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-primary);
+  }
+  .clip-top {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+  .clip-type {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 0.25rem;
+  }
+  .clip-date {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    margin-right: auto;
+  }
+  .clip-body {
+    font-size: 0.75rem;
+    line-height: 1.45;
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .clip-body.expanded {
+    white-space: pre-wrap;
+  }
+  .clip-more {
+    background: none;
+    border: none;
+    padding: 0.15rem 0;
+    font-size: 0.65rem;
+    color: var(--accent, var(--text-secondary));
+    cursor: pointer;
+  }
+  .clip-move {
+    width: 100%;
+    margin-top: 0.35rem;
+    font-size: 0.65rem;
+    padding: 0.15rem 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+  }
+  .clip-source {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    overflow-wrap: anywhere;
+  }
+  .clip-source.unsafe {
+    font-style: italic;
+    opacity: 0.7;
   }
 </style>

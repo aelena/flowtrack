@@ -271,3 +271,120 @@ async def test_import_with_null_optional_fields(client):
     assert body["imported"]["projects"] == 1
     assert body["imported"]["tasks"] == 1
     assert body["imported"]["notes"] == 1
+
+
+async def _clip(client, pid, content):
+    resp = await client.post(
+        "/api/extension/snippet",
+        json={"project_id": pid, "type": "snippet", "content": content},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_export_selected_projects_only(client):
+    """A partial backup carries the chosen projects, their snippets, and only
+    the areas those projects use, in the same shape as a full one."""
+    kept_area = (await client.post("/api/areas/", json={"name": "Kept Area"}, headers=HEADERS)).json()["id"]
+    other_area = (await client.post("/api/areas/", json={"name": "Other Area"}, headers=HEADERS)).json()["id"]
+
+    kept = (
+        await client.post("/api/projects/", json={"work_name": "Kept", "area_id": kept_area}, headers=HEADERS)
+    ).json()["id"]
+    dropped = (
+        await client.post(
+            "/api/projects/", json={"work_name": "Dropped", "area_id": other_area}, headers=HEADERS
+        )
+    ).json()["id"]
+    await client.post(f"/api/projects/{kept}/tasks/", json={"content": "- One"}, headers=HEADERS)
+    await _clip(client, kept, "kept clip")
+    await _clip(client, dropped, "dropped clip")
+
+    resp = await client.get("/api/backup/export", params={"project_ids": [kept]}, headers=HEADERS)
+    assert resp.status_code == 200
+    backup = resp.json()
+
+    assert [p["id"] for p in backup["projects"]] == [kept]
+    assert len(backup["projects"][0]["tasks"]) == 1
+    assert [a["id"] for a in backup["areas"]] == [kept_area]
+    assert [s["content"] for s in backup["snippets"]] == ["kept clip"]
+    assert backup["scope"] == {"requested": [kept], "missing": []}
+
+    # And the partial file imports cleanly on its own.
+    resp = await client.post("/api/backup/import", json=backup, headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["skipped"]["projects"] == 1
+
+
+@pytest.mark.asyncio
+async def test_export_selected_reports_unknown_ids(client):
+    pid = (await client.post("/api/projects/", json={"work_name": "Real"}, headers=HEADERS)).json()["id"]
+    ghost = "00000000-0000-4000-8000-00000000dead"
+
+    resp = await client.get("/api/backup/export", params={"project_ids": [pid, ghost]}, headers=HEADERS)
+    assert resp.status_code == 200
+    backup = resp.json()
+    assert [p["id"] for p in backup["projects"]] == [pid]
+    assert backup["scope"]["missing"] == [ghost]
+
+
+@pytest.mark.asyncio
+async def test_export_selected_with_no_area_has_no_areas(client):
+    pid = (await client.post("/api/projects/", json={"work_name": "Loose"}, headers=HEADERS)).json()["id"]
+    await client.post("/api/areas/", json={"name": "Unrelated"}, headers=HEADERS)
+
+    resp = await client.get("/api/backup/export", params={"project_ids": [pid]}, headers=HEADERS)
+    assert resp.json()["areas"] == []
+
+
+@pytest.mark.asyncio
+async def test_full_export_has_no_scope_and_keeps_pinned(client):
+    pid = (await client.post("/api/projects/", json={"work_name": "Pinned"}, headers=HEADERS)).json()["id"]
+    await client.post(f"/api/projects/{pid}/pin", headers=HEADERS)
+
+    backup = (await client.get("/api/backup/export", headers=HEADERS)).json()
+    assert "scope" not in backup
+    exported = next(p for p in backup["projects"] if p["id"] == pid)
+    assert exported["pinned"] is True
+
+    # And the flag survives the trip back in.
+    exported["id"] = "00000000-0000-4000-8000-0000000000f1"
+    exported["work_name"] = "Pinned Copy"
+    resp = await client.post(
+        "/api/backup/import",
+        json={"version": "1.0", "areas": [], "projects": [exported], "snippets": []},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 200
+    resp = await client.get(f"/api/projects/{exported['id']}", headers=HEADERS)
+    assert resp.json()["pinned"] is True
+
+
+@pytest.mark.asyncio
+async def test_premortem_survives_export_and_import(client):
+    """A backup that drops the pre-mortem loses the one document written while
+    it could still be honest. Export carries it; import puts it back."""
+    resp = await client.post(
+        "/api/projects/",
+        json={"work_name": "Premortem Proj", "premortem": "Fails if nobody uses it by June."},
+        headers=HEADERS,
+    )
+    pid = resp.json()["id"]
+
+    resp = await client.get(f"/api/backup/export?project_ids={pid}", headers=HEADERS)
+    exported = resp.json()["projects"][0]
+    assert exported["premortem"] == "Fails if nobody uses it by June."
+
+    # Re-import under a fresh id so the merge does not skip it as already present.
+    exported["id"] = "f10a1b2c-0099-4000-8000-000000000099"
+    exported["tasks"] = []
+    exported["notes"] = []
+    resp = await client.post(
+        "/api/backup/import", json={"areas": [], "projects": [exported], "snippets": []}, headers=HEADERS
+    )
+    assert resp.status_code == 200
+
+    resp = await client.get(f"/api/projects/{exported['id']}", headers=HEADERS)
+    assert resp.json()["premortem"] == "Fails if nobody uses it by June."

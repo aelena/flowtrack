@@ -61,6 +61,7 @@ Copy `.env.example` to `.env` and adjust:
 ### Projects
 - Work-in-progress and tentative final names
 - Description, vision, goal, completion/abandonment criteria
+- Pre-mortem: written before the work starts, imagining the project has failed and saying why. Inline markdown on the project, plus attached documents under a `premortem` folder. Exported with backups, quoted by `/reckoning`
 - Star rating (1-5), subjective completion %, task-based completion %
 - GitHub repo and website links
 - Local directory reference
@@ -68,10 +69,13 @@ Copy `.env.example` to `.env` and adjust:
 - Grouping by **Areas** (folders) with drag-and-drop between areas
 - Project status: **active**, **on hold**, **deprecated**
 - Archive without deletion
+- Pin to the home page, GitHub-style: pinned projects sit above the recent ones and stay there whatever their activity
+- Home page shows 6, 12, 24 or all recent projects (remembered per browser)
 - Sidebar quick actions per project (archive, ZIP download, on hold, deprecated)
 
 ### Tasks
 - Three statuses: new, in progress, done (click to cycle)
+- Filter the list by status (all, pending, in progress, done), with a count on each; the API takes `?status=` for the same thing
 - Bulk creation from bullet or ordered lists
 - Notes can be attached to tasks
 
@@ -102,6 +106,7 @@ Copy `.env.example` to `.env` and adjust:
 
 ### Backup & Restore (`/settings`)
 - **Export**: download all project data as a single JSON file (areas, projects, tasks, notes, snippets — no file attachments)
+- **Export selected**: pick some projects (archived ones included) and download only those, their snippets and the areas they use, in the same file shape, so the same import reads both
 - **Import**: upload a JSON backup to merge into the database (skips existing records by ID)
 - Useful for backup, migration, or transferring data between instances
 
@@ -124,7 +129,7 @@ So the direction inverted. **FlowTrack stopped trying to be an AI application an
 
 ### What it gives an agent
 
-Seven tools, and the number is deliberate. A server with one tool per REST endpoint gives the agent thirty ways to ask a question and no basis for choosing. These are shaped around what you actually want to know about a portfolio.
+Twelve tools, and the number is deliberate. A server with one tool per REST endpoint gives the agent thirty ways to ask a question and no basis for choosing. These are shaped around what you actually want to know about a portfolio, plus three (`create_project`, `describe_project`, `archive_project`) so an agent can register a whole folder of projects without anyone opening the UI.
 
 | Tool | |
 |---|---|
@@ -188,14 +193,49 @@ Located in `extension/`. Load as an unpacked extension in Chrome:
 1. Go to `chrome://extensions/`
 2. Enable "Developer mode"
 3. Click "Load unpacked" and select the `extension/` folder
-4. Click the extension icon, configure API URL (`http://localhost:7028`) and API key
-5. Use the popup or right-click context menu ("Save to FlowTrack") to save URLs and text snippets to projects
+4. Click the extension icon, configure API URL (`http://localhost:7028`) and API key — the
+   key must match `API_KEY` in `.env`, which ships as `ft_dev_key_change_me`
+5. Pick a project in the popup, then use the buttons or the right-click menu ("Save to FlowTrack")
+
+The project list loads as soon as both fields are filled; the **↻** button reloads
+it. If it stays on "Not loaded", the error under the buttons says why and stays
+there until you act on it — a rejected key, an unreachable URL, or FlowTrack not
+running. No CORS change is needed for the default `localhost` setup: the manifest's
+`host_permissions` cover it, and Chrome does not enforce CORS on an extension's own
+fetches to a host it has permission for.
+
+**The + button starts a new project from the popup**, with just a name. An idea
+found on the web is often not a clip for an existing project but the beginning of
+a new one, and having to open the app first is how it gets lost. The new project
+is selected and remembered immediately, so the clip you were about to save — and
+the next right-click — go to it. Fill in the rest in FlowTrack proper.
+
+**The project you pick in the popup is where right-click clips go.** The context
+menu has no picker of its own, so it reuses that choice, which is remembered
+between sessions. Clips record the page they came from in `source_url`.
+
+**Leave the picker on "Inbox (unfiled)" to clip without deciding.** That is the
+default, and the point: when you come across an idea worth exploring later, the
+cost of capturing it should not be choosing a home for it. Unfiled clips land in
+a project called `Inbox`, created the first time one is needed — no schema
+change, no migration, just a reserved name (see `backend/app/inbox.py`). Re-file
+a clip from the project page's clip panel, or with `PUT /api/snippets/{id}`.
+
+The `Inbox` is exempt from the project health dot: it is a holding pen with no
+target date that is meant to sit there collecting things, so staleness means
+nothing for it. It does still count as one active project in
+`portfolio_digest`'s WIP tally.
+
+Text selected on the page is read with `chrome.scripting`, which cannot run on
+`chrome://` pages, the Chrome Web Store or PDF viewers. There the popup says so
+and you can paste into the box instead.
 
 The manifest declares `host_permissions` for `localhost` and `127.0.0.1`, which
 is what lets the extension call the API at all — without it every request is
-blocked before it leaves the browser. If you run FlowTrack on another host,
-grant the optional permission for it, and add the extension origin to
-`CORS_ORIGINS`:
+blocked before it leaves the browser. If you run FlowTrack on another host, the
+extension has no button to ask for that: grant it by hand from
+`chrome://extensions` → FlowTrack Clipper → "Site access", and add the extension
+origin to `CORS_ORIGINS`:
 
 ```
 CORS_ORIGINS=http://localhost:7027,chrome-extension://<your-extension-id>
@@ -215,6 +255,9 @@ All endpoints require `X-API-Key` header.
 | GET/POST | `/api/projects/` | List/create projects (query: search, area_id, sort_by, sort_order, archived) |
 | GET/PUT | `/api/projects/{id}` | Get/update project |
 | POST | `/api/projects/{id}/archive` | Archive project |
+| POST | `/api/projects/{id}/unarchive` | Bring a project back out of the archive |
+| POST | `/api/projects/{id}/pin` | Pin to the home page |
+| POST | `/api/projects/{id}/unpin` | Unpin |
 | POST | `/api/projects/{id}/export` | Export as ZIP (with files) |
 | GET | `/api/projects/{id}/pending` | Pending tasks summary |
 | POST | `/api/projects/{id}/collaborators` | Add collaborator |
@@ -230,7 +273,13 @@ All endpoints require `X-API-Key` header.
 | DELETE | `/api/projects/{pid}/files/{id}` | Delete file |
 | **Extension** | | |
 | GET | `/api/extension/projects` | Simplified project list for Chrome extension |
-| POST | `/api/extension/snippet` | Save URL/snippet from extension |
+| GET | `/api/extension/inbox` | Where unfiled clips land; reports absent before first use |
+| POST | `/api/extension/project` | Create a project from the clipper, name only |
+| POST | `/api/extension/snippet` | Save URL/snippet. Omit `project_id` to file it in the `Inbox` |
+| **Snippets (clips)** | | |
+| GET | `/api/snippets/` | List clips, newest first (query: project_id, limit) |
+| PUT | `/api/snippets/{id}` | Re-file a clip under a different project |
+| DELETE | `/api/snippets/{id}` | Delete a clip |
 | **Documents** | | |
 | POST | `/api/documents/prd/{id}` | Generate PRD |
 | POST | `/api/documents/brd/{id}` | Generate BRD |
@@ -240,7 +289,7 @@ All endpoints require `X-API-Key` header.
 | GET/PUT | `/api/config/yaml` | Get/update config as YAML |
 | POST | `/api/config/reset` | Reset config to defaults |
 | **Backup** | | |
-| GET | `/api/backup/export` | Export all data as JSON |
+| GET | `/api/backup/export` | Export all data as JSON; repeat `project_ids=` to export only those projects |
 | POST | `/api/backup/import` | Import data from JSON |
 
 ## Running Tests
@@ -337,7 +386,7 @@ flowtrack/
   mcp-server/
     pyproject.toml              # Installable with uvx / pipx
     src/flowtrack_mcp/
-      server.py                 # 7 tools, 2 resources, 3 prompts
+      server.py                 # 9 tools, 2 resources, 3 prompts
       client.py                 # Thin async client over the REST API
     tests/
     smoke_test.py               # Drives the real stdio handshake
@@ -347,4 +396,6 @@ flowtrack/
     popup.css                   # Extension styles (zen aesthetic)
     popup.js                    # Extension logic (save URL/snippet)
     background.js               # Context menu service worker
+    package.json                # Lint tooling only — the extension has no build
+    eslint.config.js            # Chrome globals; runs in CI
 ```

@@ -58,6 +58,9 @@ export const archiveProject = (id) => request('POST', `/api/projects/${id}/archi
 export const unarchiveProject = (id) => request('POST', `/api/projects/${id}/unarchive`);
 export const setProjectArchived = (id, archived) =>
   archived ? archiveProject(id) : unarchiveProject(id);
+export const pinProject = (id) => request('POST', `/api/projects/${id}/pin`);
+export const unpinProject = (id) => request('POST', `/api/projects/${id}/unpin`);
+export const setProjectPinned = (id, pinned) => (pinned ? pinProject(id) : unpinProject(id));
 export const exportProject = async (id) => {
   const resp = await fetch(`${BASE_URL}/api/projects/${id}/export`, {
     method: 'GET',
@@ -74,7 +77,8 @@ export const addCollaborator = (id, collab) =>
   request('POST', `/api/projects/${id}/collaborators`, collab);
 
 // Tasks
-export const listTasks = (projectId) => request('GET', `/api/projects/${projectId}/tasks/`);
+export const listTasks = (projectId, status = null) =>
+  request('GET', `/api/projects/${projectId}/tasks/${status ? '?status=' + status : ''}`);
 export const createTasks = (projectId, content, description = null) =>
   request('POST', `/api/projects/${projectId}/tasks/`, { content, description });
 export const updateTask = (projectId, taskId, data) =>
@@ -90,6 +94,17 @@ export const listNotes = (params = {}) => {
 export const createNote = (data) => request('POST', '/api/notes/', data);
 export const updateNote = (id, content) => request('PUT', `/api/notes/${id}`, { content });
 export const deleteNote = (id) => request('DELETE', `/api/notes/${id}`);
+
+// Snippets — what the Chrome clipper writes. Until this existed the clipper
+// was write-only: clips were reachable through the project export zip and
+// nowhere else in the app.
+export const listSnippets = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request('GET', `/api/snippets/${qs ? '?' + qs : ''}`);
+};
+export const moveSnippet = (id, projectId) =>
+  request('PUT', `/api/snippets/${id}`, { project_id: projectId });
+export const deleteSnippet = (id) => request('DELETE', `/api/snippets/${id}`);
 
 // Files
 export const listFiles = (projectId) => request('GET', `/api/projects/${projectId}/files/`);
@@ -110,6 +125,18 @@ export const uploadFile = async (projectId, file, folder = null) => {
 };
 export const deleteFile = (projectId, fileId) =>
   request('DELETE', `/api/projects/${projectId}/files/${fileId}`);
+// The download route sits behind the API key like everything else, so a plain
+// <a href> cannot reach it. Fetch the bytes and let the caller hand them over.
+export const downloadFile = async (projectId, fileId) => {
+  const resp = await fetch(`${BASE_URL}/api/projects/${projectId}/files/${fileId}/download`, {
+    headers: { 'X-API-Key': get(apiKey) },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => null);
+    throw new Error(extractDetail(err, 'Download failed'));
+  }
+  return resp.blob();
+};
 
 // LLM
 export const generatePRD = (id) => request('POST', `/api/documents/prd/${id}`);
@@ -121,6 +148,33 @@ export const getConfigYaml = () => request('GET', '/api/config/yaml');
 export const putConfigYaml = (yaml) => request('PUT', '/api/config/yaml', { yaml });
 export const resetConfig = () => request('POST', '/api/config/reset');
 
+// Dashboard throughput. Counts completed_at, never updated_at: see the
+// migration a1c7f2e93b40 for why those are different questions.
+export const getThroughput = (weeks = 12) =>
+  request('GET', `/api/metrics/throughput?weeks=${weeks}`);
+
+// The UI lock. Verification happens on the server, so the hash never reaches
+// the browser. This gates the interface, not the data: every route above is
+// behind the same API key, which the MCP server and the extension also hold.
+export const getLock = () => request('GET', '/api/config/lock');
+export const verifyLock = (password) => request('POST', '/api/config/lock/verify', { password });
+export const setLockPassword = (newPassword, currentPassword) =>
+  request('PUT', '/api/config/lock/password', {
+    new_password: newPassword,
+    current_password: currentPassword ?? '',
+  });
+export const removeLockPassword = (currentPassword) =>
+  request('DELETE', '/api/config/lock/password', { current_password: currentPassword });
+export const setLockOnOpen = (lockOnOpen) =>
+  request('PUT', '/api/config/lock/settings', { lock_on_open: lockOnOpen });
+
 // Backup
-export const exportBackup = () => request('GET', '/api/backup/export');
+// No ids: everything. Some ids: only those projects, their snippets and the
+// areas they use, in the same file shape, so the same import reads both.
+export const exportBackup = (projectIds = null) => {
+  if (!projectIds) return request('GET', '/api/backup/export');
+  const qs = new URLSearchParams();
+  projectIds.forEach((id) => qs.append('project_ids', id));
+  return request('GET', `/api/backup/export?${qs.toString()}`);
+};
 export const importBackup = (data) => request('POST', '/api/backup/import', data);

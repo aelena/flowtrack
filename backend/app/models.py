@@ -47,6 +47,12 @@ class Project(Base):
     goal = Column(Text, nullable=True)
     completion_criteria = Column(Text, nullable=True)
     abandonment_criteria = Column(Text, nullable=True)
+    # The pre-mortem, written before the work starts: imagine the project has
+    # failed and say why. abandonment_criteria says when to stop; this says what
+    # is most likely to make that happen, while it can still be said honestly.
+    # Inline markdown. Longer documents go through the files panel, under the
+    # "premortem" folder, and the UI shows them next to this text.
+    premortem = Column(Text, nullable=True)
     desired_end_date = Column(Date, nullable=True)
     github_repo = Column(String(500), nullable=True)
     website = Column(String(500), nullable=True)
@@ -55,6 +61,10 @@ class Project(Base):
     local_dir = Column(String(500), nullable=True)
     area_id = Column(UUID(as_uuid=True), ForeignKey("areas.id", ondelete="SET NULL"), nullable=True)
     archived = Column(Boolean, default=False)
+    # Kept on the home page regardless of activity, the way GitHub pins repos to
+    # a profile. Stored on the row rather than in the browser so it survives a
+    # new machine and travels with a backup.
+    pinned = Column(Boolean, default=False, nullable=False, server_default="false")
     status = Column(SAEnum(ProjectStatus), default=ProjectStatus.active)
     tags = Column(JSONB, default=list)
     collaborators = Column(JSONB, default=list)
@@ -77,6 +87,15 @@ class Task(Base):
     status = Column(SAEnum(TaskStatus), default=TaskStatus.new)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    # When the task actually became done, as opposed to when the row last
+    # changed. updated_at cannot answer this: editing the title of a finished
+    # task moves it, and so does reopening and re-closing one, which is exactly
+    # the case the throughput numbers care about.
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    # True for the rows filled in by the backfill, whose completed_at is
+    # updated_at standing in for a date nobody recorded. Kept so a chart can say
+    # which part of itself is a guess instead of presenting all of it as fact.
+    completed_at_estimated = Column(Boolean, default=False, nullable=False)
 
     project = relationship("Project", back_populates="tasks")
     notes = relationship("Note", back_populates="task", cascade="all, delete-orphan")

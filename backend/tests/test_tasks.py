@@ -70,3 +70,39 @@ async def test_delete_task(client):
 
     resp = await client.delete(f"/api/projects/{pid}/tasks/{tid}", headers=HEADERS)
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_filtered_by_status(client):
+    resp = await client.post("/api/projects/", json={"work_name": "Filter Project"}, headers=HEADERS)
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/projects/{pid}/tasks/", json={"content": "- one\n- two\n- three"}, headers=HEADERS
+    )
+    one, two, _three = (t["id"] for t in resp.json())
+    await client.put(f"/api/projects/{pid}/tasks/{one}", json={"status": "done"}, headers=HEADERS)
+    await client.put(f"/api/projects/{pid}/tasks/{two}", json={"status": "in_progress"}, headers=HEADERS)
+
+    resp = await client.get(f"/api/projects/{pid}/tasks/?status=done", headers=HEADERS)
+    assert [t["title"] for t in resp.json()] == ["one"]
+
+    resp = await client.get(f"/api/projects/{pid}/tasks/?status=in_progress", headers=HEADERS)
+    assert [t["title"] for t in resp.json()] == ["two"]
+
+    resp = await client.get(f"/api/projects/{pid}/tasks/?status=new", headers=HEADERS)
+    assert [t["title"] for t in resp.json()] == ["three"]
+
+    # No filter is still everything, oldest first.
+    resp = await client.get(f"/api/projects/{pid}/tasks/", headers=HEADERS)
+    assert [t["title"] for t in resp.json()] == ["one", "two", "three"]
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_rejects_unknown_status(client):
+    """An unknown status is an error, not an empty list that looks like an answer."""
+    resp = await client.post("/api/projects/", json={"work_name": "Bad Filter"}, headers=HEADERS)
+    pid = resp.json()["id"]
+
+    resp = await client.get(f"/api/projects/{pid}/tasks/?status=finished", headers=HEADERS)
+    assert resp.status_code == 422

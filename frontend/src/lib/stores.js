@@ -47,13 +47,58 @@ export const theme = persisted('theme', 'light');
 export const language = persisted('language', 'en');
 export const font = persisted('font', 'Segoe UI');
 export const sidebarOpen = persisted('sidebarOpen', true);
-// Which face of the home page: the six most recently touched projects, or the
+// Dragged from the sidebar's right edge. 280 matches the old fixed width, so
+// nobody sees a change until they reach for the handle.
+export const SIDEBAR_WIDTH_DEFAULT = 280;
+export const SIDEBAR_WIDTH_MIN = 200;
+export const SIDEBAR_WIDTH_MAX = 640;
+export const sidebarWidth = persisted('sidebarWidth', SIDEBAR_WIDTH_DEFAULT);
+// Which face of the home page: the most recently touched projects, or the
 // full sortable table. Remembered, because it is a working preference.
 export const homeView = persisted('homeView', 'recent');
+// How many recent cards the home page shows. Six was a hard-coded guess that
+// suited a small portfolio; a bigger one wants more, and 'all' is a valid
+// answer. Pinned projects are shown on top and do not count against this.
+export const homeRecentCount = persisted('homeRecentCount', 6);
+export const HOME_RECENT_CHOICES = [6, 12, 24, 'all'];
+// Which slice of a project's task list is showing: all, new, in_progress or
+// done. One preference for every project rather than one per project, because
+// "what is still open" is asked the same way everywhere.
+export const taskFilter = persisted('taskFilter', 'all');
 export const apiKey = persisted('apiKey', 'ft_dev_key_change_me');
 // The host-side launcher. Empty disables the feature entirely, and the note
 // buttons fall back to putting the command on the clipboard.
 export const launcherUrl = persisted('launcherUrl', 'http://localhost:7030');
+
+// Unlocked for this browser session only. sessionStorage, not localStorage, on
+// purpose: the setting is called "ask when the tool is opened", and with
+// localStorage the answer would survive closing the browser and it would never
+// ask again. A reload inside the same tab does not re-prompt, which is the
+// behaviour that makes the lock tolerable to live with.
+function sessionFlag(key) {
+  const storageKey = STORAGE_PREFIX + key;
+  let start = false;
+  if (browser) {
+    try {
+      start = sessionStorage.getItem(storageKey) === 'true';
+    } catch {
+      // Blocked or full: the session just starts locked.
+    }
+  }
+  const store = writable(start);
+  if (browser) {
+    store.subscribe((value) => {
+      try {
+        sessionStorage.setItem(storageKey, value ? 'true' : 'false');
+      } catch {
+        // Nothing to do. Worst case the tab asks again.
+      }
+    });
+  }
+  return store;
+}
+
+export const unlocked = sessionFlag('unlocked');
 
 export const toasts = writable([]);
 

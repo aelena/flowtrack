@@ -8,7 +8,19 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import areas, backup, config, documents, extension, files, notes, projects, tasks
+from .routers import (
+    areas,
+    backup,
+    config,
+    documents,
+    extension,
+    files,
+    metrics,
+    notes,
+    projects,
+    snippets,
+    tasks,
+)
 
 logger = logging.getLogger("flowtrack")
 
@@ -101,11 +113,13 @@ app.include_router(areas.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(notes.router)
+app.include_router(snippets.router)
 app.include_router(files.router)
 app.include_router(extension.router)
 app.include_router(documents.router)
 app.include_router(config.router)
 app.include_router(backup.router)
+app.include_router(metrics.router)
 
 
 @app.get("/api/health")

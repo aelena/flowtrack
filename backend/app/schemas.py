@@ -31,6 +31,7 @@ class ProjectCreate(BaseModel):
     goal: str | None = None
     completion_criteria: str | None = None
     abandonment_criteria: str | None = None
+    premortem: str | None = None
     desired_end_date: date | None = None
     github_repo: str | None = None
     website: str | None = None
@@ -51,6 +52,7 @@ class ProjectUpdate(BaseModel):
     goal: str | None = None
     completion_criteria: str | None = None
     abandonment_criteria: str | None = None
+    premortem: str | None = None
     desired_end_date: date | None = None
     github_repo: str | None = None
     website: str | None = None
@@ -61,6 +63,7 @@ class ProjectUpdate(BaseModel):
     status: ProjectStatus | None = None
     tags: list[str] | None = None
     collaborators: list | None = None
+    pinned: bool | None = None
 
 
 class ProjectOut(BaseModel):
@@ -72,6 +75,7 @@ class ProjectOut(BaseModel):
     goal: str | None
     completion_criteria: str | None
     abandonment_criteria: str | None
+    premortem: str | None = None
     desired_end_date: date | None
     github_repo: str | None
     website: str | None
@@ -80,6 +84,7 @@ class ProjectOut(BaseModel):
     local_dir: str | None
     area_id: UUID | None
     archived: bool
+    pinned: bool = False
     status: ProjectStatus
     tags: list[str]
     collaborators: list
@@ -95,6 +100,7 @@ class ProjectListOut(BaseModel):
     final_name: str | None
     area_id: UUID | None
     archived: bool
+    pinned: bool = False
     status: ProjectStatus
     tags: list[str]
     star_rating: int | None
@@ -133,6 +139,8 @@ class TaskOut(BaseModel):
     status: TaskStatus
     created_at: datetime
     updated_at: datetime
+    completed_at: datetime | None = None
+    completed_at_estimated: bool = False
     model_config = {"from_attributes": True}
 
 
@@ -182,10 +190,21 @@ class CollaboratorCreate(BaseModel):
 
 # --- Snippet ---
 class SnippetCreate(BaseModel):
-    project_id: UUID
+    # None means "the inbox": a clip captured before it had a home. See app/inbox.py.
+    project_id: UUID | None = None
     type: str
     content: str
     source_url: str | None = None
+
+
+class ExtensionProjectCreate(BaseModel):
+    """Just a name. The clipper catches an idea; the rest is filled in later."""
+
+    name: str = Field(min_length=1, max_length=255)
+
+
+class SnippetUpdate(BaseModel):
+    project_id: UUID
 
 
 class SnippetOut(BaseModel):

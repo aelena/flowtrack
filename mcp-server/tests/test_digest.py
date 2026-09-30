@@ -182,3 +182,15 @@ def test_prompts_are_not_empty_and_mention_the_decision():
 
     assert "WIP" in server.next_prompt() or "wip" in server.next_prompt()
     assert "salvag" in server.close_out_prompt("some-id")
+
+
+async def test_list_projects_filters_status_client_side(fake):
+    fake([_project(status="active"), _project(status="on_hold"), _project(status="deprecated")])
+    out = await server.list_projects(status="on_hold")
+    assert out["count"] == 1
+    assert out["projects"][0]["status"] == "on_hold"
+
+
+async def test_list_projects_rejects_unknown_status(fake):
+    fake([_project()])
+    assert "error" in await server.list_projects(status="paused")

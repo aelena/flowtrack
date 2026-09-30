@@ -1,6 +1,7 @@
 import os
 import tempfile
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -41,6 +42,26 @@ async def setup_db():
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture(autouse=True)
+def clean_config():
+    """Start every test with no flowtrack.yaml.
+
+    The database was reset between tests and the config file was not, so state
+    leaked through it: a test that set a lock password left the next one running
+    against a locked config. Two tests in test_lock.py failed for that reason and
+    nothing else, which is the useful kind of failure. The config tests happened
+    to pass because each writes the whole document before reading it, so they were
+    order-dependent without anyone noticing.
+    """
+    from app.routers.config import CONFIG_PATH
+
+    if os.path.exists(CONFIG_PATH):
+        os.remove(CONFIG_PATH)
+    yield
+    if os.path.exists(CONFIG_PATH):
+        os.remove(CONFIG_PATH)
 
 
 async def override_get_db():

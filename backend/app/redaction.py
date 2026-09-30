@@ -11,7 +11,10 @@ the whole config, the user edits part of it, and writes it all back. Without
 
 REDACTED = "***REDACTED***"
 
-SECRET_KEYS = frozenset({"api_key", "apikey", "token", "secret", "password"})
+# password_hash is here too. A hash is not a password, but handing it to the
+# browser hands it to anyone who can read the page, and offline guessing at a
+# six-character minimum is not much of a wall.
+SECRET_KEYS = frozenset({"api_key", "apikey", "token", "secret", "password", "password_hash"})
 
 
 def is_secret(key: str) -> bool:

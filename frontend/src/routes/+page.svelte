@@ -1,9 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { homeView, language } from '$lib/stores.js';
-  import { listProjects } from '$lib/api.js';
+  import {
+    homeView,
+    homeRecentCount,
+    HOME_RECENT_CHOICES,
+    language,
+    showToast,
+  } from '$lib/stores.js';
+  import { listProjects, getThroughput, setProjectPinned } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
-  import { daysSince, shortDate } from '$lib/utils.js';
+  import { daysSince, projectHealth, shortDate } from '$lib/utils.js';
 
   let lang = 'en';
   language.subscribe((v) => (lang = v));
@@ -16,7 +22,16 @@
   let loading = true;
   let loadError = '';
 
+  // Throughput is a nice-to-have on this page. It loads separately and its
+  // failure is silent, because a metrics endpoint being down is no reason to
+  // withhold the project list.
+  let flow = null;
+
   onMount(async () => {
+    getThroughput(12)
+      .then((data) => (flow = data))
+      .catch(() => (flow = null));
+
     try {
       rows = await listProjects({ sort_by: 'last_activity_at', sort_order: 'desc' });
     } catch (e) {
@@ -26,7 +41,39 @@
     }
   });
 
+  const ARROW = { up: '↑', down: '↓', flat: '→' };
+
+  /** Points for a sparkline, scaled to the tallest week rather than to zero. */
+  function sparkPoints(weeks, width = 132, height = 26) {
+    if (!weeks || weeks.length < 2) return '';
+    const peak = Math.max(...weeks.map((w) => w.completed), 1);
+    const step = width / (weeks.length - 1);
+    return weeks
+      .map(
+        (w, i) => `${(i * step).toFixed(1)},${(height - (w.completed / peak) * height).toFixed(1)}`
+      )
+      .join(' ');
+  }
+
   const name = (p) => p.final_name || p.work_name || '';
+
+  // Optimistic: flip the row, ask the server, and put it back if the server
+  // disagrees. A pin is too small an action to deserve a spinner.
+  async function togglePin(project) {
+    const next = !project.pinned;
+    rows = rows.map((p) => (p.id === project.id ? { ...p, pinned: next } : p));
+    try {
+      await setProjectPinned(project.id, next);
+    } catch (e) {
+      rows = rows.map((p) => (p.id === project.id ? { ...p, pinned: !next } : p));
+      showToast(e.message);
+    }
+  }
+
+  function setRecentCount(e) {
+    const v = e.target.value;
+    homeRecentCount.set(v === 'all' ? 'all' : Number(v));
+  }
 
   // --- table state ---------------------------------------------------------
   let query = '';
@@ -36,6 +83,9 @@
   const PER_PAGE = 15;
 
   const COLUMNS = [
+    // Unlabelled and unsortable: it is a dot, and sorting by colour would sort
+    // by a category the reader cannot see the order of.
+    { key: null, label: 'colHealth', align: 'left' },
     { key: 'name', label: 'colProject', align: 'left' },
     { key: 'status', label: 'colStatus', align: 'left' },
     { key: 'star_rating', label: 'colStars', align: 'left' },
@@ -108,7 +158,11 @@
   // Filtering can strand the reader on a page that no longer exists.
   $: if (page > pageCount - 1) page = pageCount - 1;
   $: pageRows = sorted.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
-  $: recent = rows.slice(0, 6);
+  $: pinned = rows.filter((p) => p.pinned);
+  // Recent excludes what is already pinned, so a project never appears twice on
+  // the same screen.
+  $: unpinned = rows.filter((p) => !p.pinned);
+  $: recent = $homeRecentCount === 'all' ? unpinned : unpinned.slice(0, $homeRecentCount);
 
   function activityLabel(iso) {
     const d = daysSince(iso);
@@ -123,6 +177,41 @@
     <h1>FlowTrack</h1>
     <p>Select a project from the sidebar to get started, or create a new one.</p>
   </div>
+
+  {#if flow}
+    <div class="flow">
+      <div class="card">
+        <span class="card-label">{t('thisWeek', lang)}</span>
+        <span class="card-number">{flow.last_7_days}</span>
+        <span class="card-delta card-delta--{flow.trend}">
+          {ARROW[flow.trend]}
+          {flow.change > 0 ? '+' : ''}{flow.change}
+          <span class="card-vs">vs {flow.previous_7_days} {t('lastWeek', lang)}</span>
+        </span>
+      </div>
+
+      <div class="card card--wide">
+        <span class="card-label">{t('twelveWeeks', lang)}</span>
+        <svg class="spark" viewBox="0 0 132 26" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={sparkPoints(flow.weeks)} fill="none" stroke="currentColor" />
+        </svg>
+        <span class="card-range">
+          {flow.weeks[0]?.week_start} &rarr; {flow.weeks[flow.weeks.length - 1]?.week_start}
+        </span>
+      </div>
+    </div>
+
+    {#if flow.estimated_counted > 0}
+      <!-- Said out loud rather than buried. Most of this history predates the
+           column that records a completion date, so it was filled in from when
+           the row last changed. Close for most, late for anything edited after
+           it was closed. -->
+      <p class="flow-note">
+        {flow.estimated_counted} / {flow.total_counted}
+        {t('estimatedNote', lang)}
+      </p>
+    {/if}
+  {/if}
 
   <div class="view-switch" role="tablist">
     <button
@@ -142,6 +231,16 @@
       {t('allProjects', lang)}
       {#if rows.length}<span class="count">{rows.length}</span>{/if}
     </button>
+    {#if $homeView === 'recent' && rows.length > 0}
+      <label class="show-count">
+        <span class="muted small">{t('showCount', lang)}</span>
+        <select value={String($homeRecentCount)} on:change={setRecentCount}>
+          {#each HOME_RECENT_CHOICES as n}
+            <option value={String(n)}>{n === 'all' ? t('showAll', lang) : n}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
   </div>
 
   {#if loading}
@@ -151,28 +250,36 @@
   {:else if rows.length === 0}
     <p class="muted">{t('noProjects', lang)}</p>
   {:else if $homeView === 'recent'}
-    <div class="project-grid">
-      {#each recent as project (project.id)}
-        <a href="/projects/{project.id}" class="project-card">
-          <h3>{name(project)}</h3>
-          <div class="card-meta">
-            {#if project.star_rating}
-              <span class="stars"
-                >{'★'.repeat(project.star_rating)}{'☆'.repeat(5 - project.star_rating)}</span
-              >
-            {/if}
-            <div class="progress-bar" style="margin-top: 0.5rem;">
-              <div class="fill" style="width: {project.task_completion}%"></div>
-            </div>
-            <span class="completion-text">
-              {project.task_completion}% complete
-              <span class="dot">·</span>
-              {activityLabel(project.last_activity_at)}
-            </span>
-          </div>
-        </a>
-      {/each}
-    </div>
+    {#if pinned.length > 0}
+      <h2 class="section-title">
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" class="pin-glyph">
+          <path
+            d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+            stroke="currentColor"
+            stroke-width="1.5"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        {t('pinned', lang)}
+      </h2>
+      <div class="project-grid pinned-grid">
+        {#each pinned as project (project.id)}
+          {@render card(project)}
+        {/each}
+      </div>
+      <h2 class="section-title">{t('recentProjects', lang)}</h2>
+    {/if}
+    {#if recent.length === 0 && pinned.length > 0}
+      <p class="muted small">{t('noMatches', lang)}</p>
+    {:else}
+      <div class="project-grid">
+        {#each recent as project (project.id)}
+          {@render card(project)}
+        {/each}
+      </div>
+    {/if}
   {:else}
     <div class="table-tools">
       <input
@@ -200,18 +307,51 @@
             <tr>
               {#each COLUMNS as col}
                 <th class:num={col.align === 'right'}>
-                  <button on:click={() => sortBy(col.key)} class:sorted={sortKey === col.key}>
-                    {t(col.label, lang)}
-                    <span class="arrow">{sortKey === col.key ? (sortAsc ? '↑' : '↓') : ''}</span>
-                  </button>
+                  {#if col.key}
+                    <button on:click={() => sortBy(col.key)} class:sorted={sortKey === col.key}>
+                      {t(col.label, lang)}
+                      <span class="arrow">{sortKey === col.key ? (sortAsc ? '↑' : '↓') : ''}</span>
+                    </button>
+                  {/if}
                 </th>
               {/each}
             </tr>
           </thead>
           <tbody>
             {#each pageRows as p (p.id)}
+              {@const health = projectHealth(p)}
               <tr>
-                <td><a href="/projects/{p.id}">{name(p)}</a></td>
+                <td class="health-cell">
+                  <span
+                    class="dot dot--{health.level}"
+                    title={health.reason}
+                    aria-label={health.reason}
+                    role="img"
+                  ></span>
+                </td>
+                <td class="name-cell">
+                  <button
+                    type="button"
+                    class="pin-btn pin-btn--inline"
+                    class:pinned={p.pinned}
+                    title={p.pinned ? t('unpin', lang) : t('pin', lang)}
+                    aria-label={p.pinned ? t('unpin', lang) : t('pin', lang)}
+                    aria-pressed={p.pinned}
+                    on:click={() => togglePin(p)}
+                  >
+                    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                      <path
+                        d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        fill="none"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <a href="/projects/{p.id}">{name(p)}</a>
+                </td>
                 <td><span class="status status--{p.status}">{p.status}</span></td>
                 <td class="stars">
                   {p.star_rating ? '★'.repeat(p.star_rating) : ''}
@@ -246,6 +386,51 @@
     {/if}
   {/if}
 </div>
+
+{#snippet card(project)}
+  <!-- The link and the pin are siblings, not nested: a button inside an anchor
+       is invalid HTML and the browsers disagree about which one gets the click. -->
+  <div class="card-wrap">
+    <a href="/projects/{project.id}" class="project-card">
+      <h3>{name(project)}</h3>
+      <div class="card-meta">
+        {#if project.star_rating}
+          <span class="stars"
+            >{'★'.repeat(project.star_rating)}{'☆'.repeat(5 - project.star_rating)}</span
+          >
+        {/if}
+        <div class="progress-bar" style="margin-top: 0.5rem;">
+          <div class="fill" style="width: {project.task_completion}%"></div>
+        </div>
+        <span class="completion-text">
+          {project.task_completion}% complete
+          <span class="dot">·</span>
+          {activityLabel(project.last_activity_at)}
+        </span>
+      </div>
+    </a>
+    <button
+      type="button"
+      class="pin-btn pin-btn--card"
+      class:pinned={project.pinned}
+      title={project.pinned ? t('unpin', lang) : t('pin', lang)}
+      aria-label={project.pinned ? t('unpin', lang) : t('pin', lang)}
+      aria-pressed={project.pinned}
+      on:click={() => togglePin(project)}
+    >
+      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+        <path
+          d="M6 1.5h4M7 1.5v4L4.5 8v1h7V8L9 5.5v-4M8 9v5.5"
+          stroke="currentColor"
+          stroke-width="1.5"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+  </div>
+{/snippet}
 
 <style>
   .home {
@@ -300,6 +485,102 @@
     font-weight: 400;
     font-size: 0.75rem;
     color: var(--text-muted);
+  }
+
+  .show-count {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-bottom: 0.3rem;
+  }
+
+  .show-count select {
+    font-size: 0.8rem;
+    padding: 0.15rem 0.35rem;
+    background: var(--bg-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin: 0 0 0.6rem;
+  }
+
+  .pinned-grid {
+    margin-bottom: 1.5rem;
+  }
+
+  .pin-glyph {
+    color: var(--accent);
+  }
+
+  .card-wrap {
+    position: relative;
+  }
+
+  .card-wrap .project-card {
+    height: 100%;
+  }
+
+  .pin-btn {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    line-height: 0;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .pin-btn:hover {
+    color: var(--accent);
+    background: var(--bg);
+  }
+
+  .pin-btn.pinned {
+    color: var(--accent);
+  }
+
+  /* Quiet until hovered or already set: an unpinned card should not carry a
+     control on it, only an affordance when you reach for one. */
+  .pin-btn--card {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+
+  .card-wrap:hover .pin-btn--card,
+  .pin-btn--card:focus-visible,
+  .pin-btn--card.pinned {
+    opacity: 1;
+  }
+
+  .card-wrap .project-card h3 {
+    padding-right: 1.5rem;
+  }
+
+  .pin-btn--inline {
+    vertical-align: middle;
+    margin-right: 0.3rem;
+    opacity: 0.35;
+  }
+
+  tbody tr:hover .pin-btn--inline,
+  .pin-btn--inline.pinned,
+  .pin-btn--inline:focus-visible {
+    opacity: 1;
   }
 
   .muted {
@@ -502,5 +783,123 @@
   .pager button:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  /* --- throughput ------------------------------------------------------- */
+
+  .flow {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    min-width: 9rem;
+  }
+
+  .card--wide {
+    flex: 1;
+    min-width: 14rem;
+    color: var(--text-secondary);
+  }
+
+  .card-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+
+  .card-number {
+    font-size: 1.6rem;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  .card-delta {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card-delta--up {
+    color: #2e7d32;
+  }
+
+  .card-delta--down {
+    color: #c0392b;
+  }
+
+  .card-delta--flat {
+    color: var(--text-secondary);
+  }
+
+  .card-vs {
+    color: var(--text-secondary);
+  }
+
+  .spark {
+    width: 100%;
+    height: 26px;
+    margin: 0.25rem 0;
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .card-range {
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .flow-note {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+
+  /* --- health dot ------------------------------------------------------- */
+
+  .health-cell {
+    width: 1.2rem;
+    padding-right: 0;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    /* A ring rather than a bare fill, so the grey one still reads as a
+       deliberate state and not as a missing value. */
+    box-shadow: 0 0 0 1px var(--bg-secondary);
+  }
+
+  .dot--good {
+    background: #2e7d32;
+  }
+
+  .dot--warn {
+    background: #e08a00;
+  }
+
+  .dot--bad {
+    background: #c0392b;
+  }
+
+  .dot--frozen {
+    background: #9aa0a6;
+  }
+
+  .dot--unknown {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--border);
   }
 </style>

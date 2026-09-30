@@ -172,3 +172,58 @@ async def test_unknown_sort_key_still_falls_back(client):
     """An unrecognised sort_by must not 500 now that the sort has three branches."""
     resp = await client.get("/api/projects/?sort_by=; DROP TABLE projects", headers=HEADERS)
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_pin_and_unpin_project(client):
+    resp = await client.post("/api/projects/", json={"work_name": "Pin Me"}, headers=HEADERS)
+    pid = resp.json()["id"]
+    assert resp.json()["pinned"] is False
+
+    resp = await client.post(f"/api/projects/{pid}/pin", headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["pinned"] is True
+
+    # The listing carries the flag too, so the home page needs no second call.
+    resp = await client.get("/api/projects/", headers=HEADERS)
+    assert next(p for p in resp.json() if p["id"] == pid)["pinned"] is True
+
+    resp = await client.post(f"/api/projects/{pid}/unpin", headers=HEADERS)
+    assert resp.json()["pinned"] is False
+
+
+@pytest.mark.asyncio
+async def test_pin_unknown_project_is_404(client):
+    resp = await client.post("/api/projects/00000000-0000-4000-8000-000000000000/pin", headers=HEADERS)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_premortem_is_stored_and_editable(client):
+    """The pre-mortem is a first-class field, not a note: it survives a round
+    trip through create, update and read, and clears to null like the other
+    optional text fields do."""
+    resp = await client.post(
+        "/api/projects/",
+        json={"work_name": "Doomed", "premortem": "# It failed because\n- nobody asked for it"},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+    assert resp.json()["premortem"].startswith("# It failed")
+
+    resp = await client.put(f"/api/projects/{pid}", json={"premortem": "Scope crept."}, headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["premortem"] == "Scope crept."
+
+    resp = await client.get(f"/api/projects/{pid}", headers=HEADERS)
+    assert resp.json()["premortem"] == "Scope crept."
+
+    resp = await client.put(f"/api/projects/{pid}", json={"premortem": None}, headers=HEADERS)
+    assert resp.json()["premortem"] is None
+
+
+@pytest.mark.asyncio
+async def test_premortem_defaults_to_null(client):
+    resp = await client.post("/api/projects/", json={"work_name": "Plain"}, headers=HEADERS)
+    assert resp.json()["premortem"] is None

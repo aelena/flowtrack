@@ -109,7 +109,9 @@ select {
   background: #fff;
   color: #2c2c2c;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .btn:hover {
@@ -151,4 +153,34 @@ select {
   background: #fdf0ef;
   color: #9b3232;
   border: 1px solid #f0c5c5;
+}
+
+.hint {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #999;
+}
+
+.new-project-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.new-project-row input {
+  flex: 1;
+}
+
+.btn-small {
+  padding: 5px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Two icon buttons share the field's top-right corner, so the new-project one
+   sits to the left of the refresh one instead of underneath it. */
+#newProject {
+  right: 22px;
+  font-size: 15px;
 }
