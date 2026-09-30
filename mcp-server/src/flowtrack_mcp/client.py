@@ -95,3 +95,14 @@ class FlowTrackClient:
     async def update_project(self, project_id: str, **fields: Any) -> dict:
         fields = {k: v for k, v in fields.items() if v is not None}
         return await self._request("PUT", f"/api/projects/{project_id}", json=fields)
+
+    async def create_project(self, **fields: Any) -> dict:
+        fields = {k: v for k, v in fields.items() if v is not None}
+        return await self._request("POST", "/api/projects/", json=fields)
+
+    async def create_area(self, name: str) -> dict:
+        return await self._request("POST", "/api/areas/", json={"name": name})
+
+    async def archive_project(self, project_id: str, *, archived: bool = True) -> dict:
+        verb = "archive" if archived else "unarchive"
+        return await self._request("POST", f"/api/projects/{project_id}/{verb}")

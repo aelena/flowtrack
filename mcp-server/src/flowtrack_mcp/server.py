@@ -1,9 +1,11 @@
 """FlowTrack MCP server.
 
-Nine tools, two resources, three prompts. The tools are deliberately shaped
+Twelve tools, two resources, three prompts. The tools are deliberately shaped
 around the questions you ask a portfolio — what is rotting, what should I touch
 next — rather than mirroring the REST API. A server with one tool per endpoint
-drowns the agent in choices and answers nothing.
+drowns the agent in choices and answers nothing. The three that write a
+project's identity (create, describe, archive) exist so an agent can register
+a whole folder of projects in one sitting, not so it can tinker with fields.
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ default to encouraging more work.
 mcp = MCPServer(
     name="flowtrack",
     title="FlowTrack",
-    version="0.1.0",
+    version="0.2.0",
     instructions=INSTRUCTIONS,
 )
 
@@ -175,12 +177,8 @@ async def set_project_state(
     star_rating: int | None = None,
     subjective_completion: int | None = None,
 ) -> dict:
-    if status is not None and status not in {"active", "on_hold", "deprecated"}:
-        return {"error": "status must be one of: active, on_hold, deprecated"}
-    if star_rating is not None and not 1 <= star_rating <= 5:
-        return {"error": "star_rating must be between 1 and 5"}
-    if subjective_completion is not None and not 0 <= subjective_completion <= 100:
-        return {"error": "subjective_completion must be between 0 and 100"}
+    if err := _validate_state(status, star_rating, subjective_completion):
+        return {"error": err}
 
     project = await _client().update_project(
         project_id,
@@ -189,6 +187,152 @@ async def set_project_state(
         subjective_completion=subjective_completion,
     )
     return _slim(project)
+
+
+_STATUSES = {"active", "on_hold", "deprecated"}
+
+
+def _split_tags(tags: str | None) -> list[str] | None:
+    if tags is None:
+        return None
+    return [t.strip() for t in tags.split(",") if t.strip()]
+
+
+def _validate_state(
+    status: str | None, star_rating: int | None, subjective_completion: int | None
+) -> str | None:
+    if status is not None and status not in _STATUSES:
+        return "status must be one of: active, on_hold, deprecated"
+    if star_rating is not None and not 1 <= star_rating <= 5:
+        return "star_rating must be between 1 and 5"
+    if subjective_completion is not None and not 0 <= subjective_completion <= 100:
+        return "subjective_completion must be between 0 and 100"
+    return None
+
+
+async def _resolve_area(client: FlowTrackClient, area: str | None, *, create: bool) -> str | None:
+    """Turn an area *name* into its id. An exact match wins over a substring one;
+    with create=True a missing area is made rather than reported."""
+    if not area:
+        return None
+    areas = await client.list_areas()
+    match = next((a for a in areas if a["name"].lower() == area.lower()), None)
+    if match is None:
+        match = next((a for a in areas if area.lower() in a["name"].lower()), None)
+    if match is None and create:
+        match = await client.create_area(area)
+    return match["id"] if match else None
+
+
+@mcp.tool(
+    description=(
+        "Register a project FlowTrack does not know yet. Give it at least a name "
+        "and, ideally, its abandonment_criteria — the field this tool exists "
+        "for. `area` is an area *name*, created if missing; `tags` is "
+        "comma-separated. Returns the new project's id, which every other tool "
+        "needs. Check list_projects first: a duplicate is worse than no entry."
+    )
+)
+async def create_project(
+    work_name: str,
+    description: str | None = None,
+    vision: str | None = None,
+    goal: str | None = None,
+    completion_criteria: str | None = None,
+    abandonment_criteria: str | None = None,
+    premortem: str | None = None,
+    github_repo: str | None = None,
+    website: str | None = None,
+    local_dir: str | None = None,
+    area: str | None = None,
+    tags: str | None = None,
+    status: str = "active",
+    star_rating: int | None = None,
+    subjective_completion: int = 0,
+    final_name: str | None = None,
+) -> dict:
+    if err := _validate_state(status, star_rating, subjective_completion):
+        return {"error": err}
+    client = _client()
+    project = await client.create_project(
+        work_name=work_name,
+        final_name=final_name,
+        description=description,
+        vision=vision,
+        goal=goal,
+        completion_criteria=completion_criteria,
+        abandonment_criteria=abandonment_criteria,
+        premortem=premortem,
+        github_repo=github_repo,
+        website=website,
+        local_dir=local_dir,
+        area_id=await _resolve_area(client, area, create=True),
+        tags=_split_tags(tags) or [],
+        status=status,
+        star_rating=star_rating,
+        subjective_completion=subjective_completion,
+    )
+    return _slim(project)
+
+
+@mcp.tool(
+    description=(
+        "Rewrite what a project *is*: description, vision, goal, completion and "
+        "abandonment criteria, pre-mortem, links, local folder, area (by name, "
+        "created if missing) and tags (comma-separated; replaces the list). "
+        "Only the fields you pass change. Status, stars and subjective "
+        "completion belong to set_project_state — those are decisions, this is "
+        "documentation."
+    )
+)
+async def describe_project(
+    project_id: str,
+    work_name: str | None = None,
+    final_name: str | None = None,
+    description: str | None = None,
+    vision: str | None = None,
+    goal: str | None = None,
+    completion_criteria: str | None = None,
+    abandonment_criteria: str | None = None,
+    premortem: str | None = None,
+    github_repo: str | None = None,
+    website: str | None = None,
+    local_dir: str | None = None,
+    area: str | None = None,
+    tags: str | None = None,
+) -> dict:
+    client = _client()
+    project = await client.update_project(
+        project_id,
+        work_name=work_name,
+        final_name=final_name,
+        description=description,
+        vision=vision,
+        goal=goal,
+        completion_criteria=completion_criteria,
+        abandonment_criteria=abandonment_criteria,
+        premortem=premortem,
+        github_repo=github_repo,
+        website=website,
+        local_dir=local_dir,
+        area_id=await _resolve_area(client, area, create=True),
+        tags=_split_tags(tags),
+    )
+    return _slim(project)
+
+
+@mcp.tool(
+    description=(
+        "Archive a project so it leaves every digest and listing, or bring it "
+        "back with archived=false. Archive the folder that should stop consuming "
+        "attention altogether. A project that is merely stopped should keep its "
+        "status (deprecated or on_hold) and stay visible, so the decision stays "
+        "on record."
+    )
+)
+async def archive_project(project_id: str, archived: bool = True) -> dict:
+    project = await _client().archive_project(project_id, archived=archived)
+    return {**_slim(project), "archived": project.get("archived", archived)}
 
 
 @mcp.tool(

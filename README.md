@@ -129,7 +129,7 @@ So the direction inverted. **FlowTrack stopped trying to be an AI application an
 
 ### What it gives an agent
 
-Nine tools, and the number is deliberate. A server with one tool per REST endpoint gives the agent thirty ways to ask a question and no basis for choosing. These are shaped around what you actually want to know about a portfolio.
+Twelve tools, and the number is deliberate. A server with one tool per REST endpoint gives the agent thirty ways to ask a question and no basis for choosing. These are shaped around what you actually want to know about a portfolio, plus three (`create_project`, `describe_project`, `archive_project`) so an agent can register a whole folder of projects without anyone opening the UI.
 
 | Tool | |
 |---|---|
