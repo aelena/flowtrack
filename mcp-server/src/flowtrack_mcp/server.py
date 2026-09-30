@@ -19,6 +19,7 @@ from .client import FlowTrackClient, FlowTrackError
 
 WIP_LIMIT = int(os.environ.get("FLOWTRACK_WIP_LIMIT", "3"))
 STALE_DAYS = int(os.environ.get("FLOWTRACK_STALE_DAYS", "30"))
+_STATUSES = {"active", "on_hold", "deprecated"}
 
 INSTRUCTIONS = """\
 FlowTrack is an opinionated portfolio tracker. Two of its fields carry the
@@ -107,8 +108,14 @@ async def list_projects(
             return {"error": f"No area matching {area!r}", "areas": [a["name"] for a in areas]}
         area_id = match["id"]
 
-    projects = await client.list_projects(archived=include_archived, area_id=area_id, status=status)
+    if status is not None and status not in _STATUSES:
+        return {"error": "status must be one of: active, on_hold, deprecated"}
+
+    # The REST API filters by area and archived state; status is filtered here.
+    projects = await client.list_projects(archived=include_archived, area_id=area_id)
     rows = [_slim(p) for p in projects]
+    if status is not None:
+        rows = [r for r in rows if r["status"] == status]
 
     if min_stars is not None:
         rows = [r for r in rows if (r["stars"] or 0) >= min_stars]
@@ -187,9 +194,6 @@ async def set_project_state(
         subjective_completion=subjective_completion,
     )
     return _slim(project)
-
-
-_STATUSES = {"active", "on_hold", "deprecated"}
 
 
 def _split_tags(tags: str | None) -> list[str] | None:
