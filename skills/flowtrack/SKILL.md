@@ -9,9 +9,23 @@ FlowTrack is an opinionated portfolio tracker (FastAPI + SvelteKit + PostgreSQL,
 
 ## Find the project
 
-1. Look for a `.flowtrack` file at the repo root. It is JSON: `{"project_id": "...", "name": "..."}`. Use the id.
+1. Look for a `.flowtrack` file at the repo root. It is JSON; only `project_id` is required:
+
+   ```json
+   {
+     "project_id": "b224d845-04e5-404e-91da-eb90efac0459",
+     "name": "tai-check",
+     "api": "http://localhost:7028",
+     "specs": "specs.md"
+   }
+   ```
+
+   `project_id` is the FlowTrack id (the UUID in the project's URL). `name` is for humans and for a sanity check:
+   if it differs from the project's `work_name`, say so before writing anything. `api` is where this FlowTrack
+   lives when it is not the default `http://localhost:7028`. `specs` names the working brief to read first; it is
+   often untracked, so its absence is not an error. Never put an API key in this file; it is committed.
 2. Otherwise call the MCP tool `list_projects` and match by name or `local_dir`.
-3. If neither works, the project is not tracked: ask before creating one (`create_project`); a duplicate is worse than no entry.
+3. If neither works, the project is not tracked: ask before creating one (`create_project`); a duplicate is worse than no entry. When you do create one, offer to write the `.flowtrack` file.
 
 ## Start of a session
 

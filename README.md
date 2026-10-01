@@ -290,7 +290,27 @@ Full configuration, including Claude Desktop and Cursor, in [`mcp-server/README.
 
 ### Companion Claude Skill
 
-🔥 If you are using FlowTrack with multiple projects (in my case 60+) then note that A **Claude Code skill** lives in [`skills/flowtrack/`](skills/flowtrack/): copy it to `~/.claude/skills/flowtrack/` and any coding session can keep a project's record honest from inside the repo. Drop a `.flowtrack` file (`{"project_id": "...", "name": "..."}`) at a repo's root and `/flowtrack` finds the project, reads its abandonment criteria and open tasks at the start of a session, closes tasks as features ship, records decisions as dated notes, and leaves the next steps and an honest completion figure at the end.
+🔥 If you are using FlowTrack with multiple projects (in my case 60+) then note that a **Claude Code skill** lives in [`skills/flowtrack/`](skills/flowtrack/): copy it to `~/.claude/skills/flowtrack/` and any coding session can keep a project's record honest from inside the repo. `/flowtrack` finds the project, reads its abandonment criteria and open tasks at the start of a session, closes tasks as features ship, records decisions as dated notes, and leaves the next steps and an honest completion figure at the end. It never changes a project's status or stars on its own: those are reckoning decisions.
+
+The skill finds the project through a `.flowtrack` file at the repo root. It is JSON, committed, and only `project_id` is required:
+
+```json
+{
+  "project_id": "b224d845-04e5-404e-91da-eb90efac0459",
+  "name": "tai-check",
+  "api": "http://localhost:7028",
+  "specs": "specs.md"
+}
+```
+
+| Field | | |
+|---|---|---|
+| `project_id` | **required** | The project's FlowTrack id: the UUID in its URL, or `id` from the API. |
+| `name` | optional | For humans, and a sanity check: the skill warns when it differs from the project's `work_name` before writing anything. |
+| `api` | optional | Where this FlowTrack lives when it is not the default `http://localhost:7028`. |
+| `specs` | optional | The working brief to read first, often an untracked `specs.md`; its absence is not an error. |
+
+Never put an API key in this file. The key stays in the MCP server's environment (`FLOWTRACK_API_KEY`), and the skill falls back to the REST API with the key from `.env` only when no MCP server is configured.
 
 ### One thing to keep in mind
 
