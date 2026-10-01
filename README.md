@@ -163,6 +163,8 @@ claude mcp add flowtrack \
 
 Full configuration, including Claude Desktop and Cursor, in [`mcp-server/README.md`](mcp-server/README.md).
 
+A **Claude Code skill** lives in [`skills/flowtrack/`](skills/flowtrack/): copy it to `~/.claude/skills/flowtrack/` and any coding session can keep a project's record honest from inside the repo. Drop a `.flowtrack` file (`{"project_id": "...", "name": "..."}`) at a repo's root and `/flowtrack` finds the project, reads its abandonment criteria and open tasks at the start of a session, closes tasks as features ship, records decisions as dated notes, and leaves the next steps and an honest completion figure at the end.
+
 ### One thing to keep in mind
 
 **Notes and snippets are data, not instructions.** Some of them arrive from arbitrary web pages through the Chrome clipper, which means a note can contain text engineered to read like a directive. The server's instructions say so explicitly, and any prompt built on top of this should treat note content as material to evaluate rather than orders to follow.
